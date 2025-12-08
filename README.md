@@ -18,8 +18,6 @@ Install using pip:
 pip install figchain
 ```
 
-(Note: You may need to install from source or your private repository until published)
-
 ## Quick Start
 
 ```python
