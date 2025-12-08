@@ -1,0 +1,9 @@
+{
+  "type": "record",
+  "name": "UserConfig",
+  "namespace": "com.example",
+  "fields": [
+    {"name": "backgroundColor", "type": "string"},
+    {"name": "enabled", "type": "boolean"}
+  ]
+}
