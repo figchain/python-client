@@ -54,6 +54,9 @@ class FigChainClient:
         if not config.environment_id:
             raise ValueError("Environment ID is required")
 
+        if not config.client_secret:
+            raise ValueError("Client secret is required")
+
         # 3. Initialize Components
         self.transport = Transport(config.base_url, config.client_secret, uuid.UUID(config.environment_id))
         self.store = Store()
@@ -165,12 +168,9 @@ class FigChainClient:
     def get_fig(self,
                 key: str,
                 result_type: Type[T],
-                context: Context = None,
+                context: Context = {},
                 namespace: Optional[str] = None,
                 default_value: Optional[T] = None) -> Optional[T]:
-
-        if context is None:
-            context = {}
 
         if namespace is None:
             if len(self.namespaces) == 1:

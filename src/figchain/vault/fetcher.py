@@ -1,6 +1,5 @@
 import boto3
 from botocore.client import Config as BotoConfig
-from typing import Optional
 import io
 from ..config import Config
 
@@ -28,19 +27,16 @@ class S3VaultFetcher:
             key = f"{key_fingerprint}/{key}"
 
         if self.prefix:
-            if self.prefix.endswith("/"):
-                key = f"{self.prefix}{key}"
-            else:
-                key = f"{self.prefix}/{key}"
+            key = f"{self.prefix.rstrip('/')}/{key}"
 
-        if key.startswith("/"):
-            key = key[1:]
+        # S3 keys should not have a leading slash
+        key = key.lstrip('/')
 
         try:
             response = self.s3_client.get_object(Bucket=self.bucket, Key=key)
             return io.BytesIO(response['Body'].read())
         except Exception as e:
-            raise Exception(f"Failed to fetch backup from S3: {e}")
+            raise Exception(f"Failed to fetch backup from S3: {e}") from e
 
     def close(self):
         # Boto3 client doesn't strictly need close, but good practice if available
