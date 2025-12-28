@@ -15,6 +15,10 @@ from .bootstrap.vault import VaultStrategy
 from .bootstrap.hybrid import HybridStrategy
 from .bootstrap.fallback import FallbackStrategy
 from .vault.service import VaultService
+from .vault.service import VaultService
+from .encryption.service import EncryptionService
+from .auth import TokenProvider, SharedSecretTokenProvider, PrivateKeyTokenProvider
+from .util import load_rsa_private_key
 
 T = TypeVar("T")
 
@@ -54,11 +58,26 @@ class FigChainClient:
         if not config.environment_id:
             raise ValueError("Environment ID is required")
 
-        if not config.client_secret:
-            raise ValueError("Client secret is required")
+        if not config.client_secret and not config.auth_private_key_path:
+            raise ValueError("Client secret or Auth private key is required")
 
         # 3. Initialize Components
-        self.transport = Transport(config.base_url, config.client_secret, uuid.UUID(config.environment_id))
+        token_provider: TokenProvider
+        if config.auth_private_key_path:
+            if config.namespaces and len(config.namespaces) > 1:
+                raise ValueError("Private key authentication can only be used with a single namespace")
+
+            private_key = load_rsa_private_key(config.auth_private_key_path)
+            # Use environment_id as service_account_id for now if not provided
+            service_account_id = config.auth_client_id if config.auth_client_id else config.environment_id
+            # Determine Tenant ID (could config or default)
+            tenant_id = getattr(config, 'tenant_id', 'default') # Assuming added to config or default
+            namespace = config.namespaces[0] if config.namespaces else None
+            token_provider = PrivateKeyTokenProvider(private_key, service_account_id, tenant_id=tenant_id, namespace=namespace)
+        else:
+            token_provider = SharedSecretTokenProvider(config.client_secret)
+
+        self.transport = Transport(config.base_url, token_provider, uuid.UUID(config.environment_id))
         self.store = Store()
         self.evaluator = Evaluator()
 
@@ -67,6 +86,10 @@ class FigChainClient:
         self._poller_thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
         self._listeners: Dict[str, List[tuple[Callable[[Any], None], Type[Any]]]] = {}
+        self.encryption_service: Optional[EncryptionService] = None
+
+        if config.encryption_private_key_path:
+            self.encryption_service = EncryptionService(self.transport, config.encryption_private_key_path)
 
         # 4. Bootstrap Strategy
         server_strategy = ServerStrategy(self.transport, self.as_of)
@@ -143,8 +166,15 @@ class FigChainClient:
                         fig = self.evaluator.evaluate(family, context)
                         if fig:
                             try:
+                                payload = fig.payload
+                                if fig.isEncrypted:
+                                    if not self.encryption_service:
+                                        logger.error(f"Listener received encrypted fig for key '{key}' but client is not configured for decryption")
+                                        return
+                                    payload = self.encryption_service.decrypt(fig, family.definition.namespace)
+
                                 schema_name = result_type.__name__
-                                val = deserialize(fig.payload, schema_name, result_type)
+                                val = deserialize(payload, schema_name, result_type)
                                 callback(val)
                             except Exception as e:
                                 logger.error(f"Failed to notify listener for {key}: {e}")
@@ -198,8 +228,17 @@ class FigChainClient:
             return default_value
 
         try:
-            schema_name = result_type.__name__
-            return deserialize(fig.payload, schema_name, result_type)
+            payload = fig.payload
+            if fig.isEncrypted:
+                if not self.encryption_service:
+                    raise ValueError(f"Received encrypted fig for key '{key}' but client is not configured for decryption")
+                payload = self.encryption_service.decrypt(fig, namespace)
+
+            schema_info = result_type.__name__
+            if hasattr(result_type, "schema") and callable(result_type.schema):
+                schema_info = result_type.schema()
+
+            return deserialize(payload, schema_info, result_type)
         except Exception as e:
             logger.error(f"Failed to deserialize fig {key}: {e}")
             return default_value
