@@ -94,6 +94,26 @@
             {
                 "name": "payload",
                 "type": "bytes"
+            },
+            {
+                "name": "isEncrypted",
+                "type": "boolean",
+                "default": false
+            },
+            {
+                "name": "wrappedDek",
+                "type": ["null", "bytes"],
+                "default": null
+            },
+            {
+                "name": "encryptionAlgorithm",
+                "type": ["null", "string"],
+                "default": null
+            },
+            {
+                "name": "keyId",
+                "type": ["null", "string"],
+                "default": null
             }
         ]
     },

@@ -23,6 +23,7 @@ class Config:
     max_retries: int = 3
     retry_delay_ms: int = 1000
     bootstrap_strategy: BootstrapStrategy = BootstrapStrategy.SERVER
+    tenant_id: str = "default"
 
     # Vault Configuration
     vault_enabled: bool = False
@@ -32,6 +33,11 @@ class Config:
     vault_endpoint: Optional[str] = None
     vault_path_style_access: bool = False
     vault_private_key_path: Optional[str] = None
+
+    # Encryption
+    encryption_private_key_path: Optional[str] = None
+    auth_private_key_path: Optional[str] = None
+    auth_client_id: Optional[str] = None
 
     @classmethod
     def load(cls, path: Optional[str] = None, **kwargs) -> 'Config':
@@ -73,6 +79,8 @@ class Config:
             "FIGCHAIN_VAULT_ENDPOINT": "vault_endpoint",
             "FIGCHAIN_VAULT_PATH_STYLE_ACCESS": "vault_path_style_access",
             "FIGCHAIN_VAULT_PRIVATE_KEY_PATH": "vault_private_key_path",
+            "FIGCHAIN_ENCRYPTION_PRIVATE_KEY_PATH": "encryption_private_key_path",
+            "FIGCHAIN_AUTH_PRIVATE_KEY_PATH": "auth_private_key_path",
         }
 
         for env_key, config_key in env_map.items():

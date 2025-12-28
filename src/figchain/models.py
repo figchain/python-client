@@ -44,6 +44,10 @@ class Fig:
     figId: uuid.UUID
     version: uuid.UUID
     payload: bytes
+    isEncrypted: bool = False
+    wrappedDek: Optional[bytes] = None
+    encryptionAlgorithm: Optional[str] = None
+    keyId: Optional[str] = None
 
 @dataclass(kw_only=True)
 class FigFamily:
