@@ -70,7 +70,7 @@ class FigChainClient:
             # Use environment_id as service_account_id for now if not provided
             service_account_id = config.auth_client_id if config.auth_client_id else config.environment_id
             tenant_id = config.tenant_id
-            namespace = config.namespaces[0] if config.namespaces else None
+            namespace = next(iter(config.namespaces)) if config.namespaces else None
             token_provider = PrivateKeyTokenProvider(private_key, service_account_id, tenant_id=tenant_id, namespace=namespace)
         else:
             token_provider = SharedSecretTokenProvider(config.client_secret)

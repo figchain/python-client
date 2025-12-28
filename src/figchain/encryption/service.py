@@ -46,11 +46,7 @@ class EncryptionService:
         try:
             ns_keys = self.transport.get_namespace_key(namespace)
 
-            matching_key = None
-            for key in ns_keys:
-                if key.key_id == key_id:
-                    matching_key = key
-                    break
+            matching_key = next((key for key in ns_keys if key.key_id == key_id), None)
 
             if not matching_key:
                 if not key_id and ns_keys:

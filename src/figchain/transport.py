@@ -36,7 +36,7 @@ class Transport:
         resp = self.session.post(url, data=data, headers=headers, timeout=5)
 
         if resp.status_code == 401:
-            raise PermissionError("Authentication failed: Check client secret")
+            raise PermissionError("Authentication failed: Check your credentials")
         if resp.status_code == 403:
             raise PermissionError("Authorization failed: Check environment ID and permissions")
 
@@ -59,7 +59,7 @@ class Transport:
         resp = self.session.post(url, data=data, headers=headers, timeout=65)
 
         if resp.status_code == 401:
-            raise PermissionError("Authentication failed: Check client secret")
+            raise PermissionError("Authentication failed: Check your credentials")
         if resp.status_code == 403:
             raise PermissionError("Authorization failed: Check environment ID and permissions")
 
