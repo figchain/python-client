@@ -78,7 +78,6 @@ class Config:
             "FIGCHAIN_VAULT_REGION": "vault_region",
             "FIGCHAIN_VAULT_ENDPOINT": "vault_endpoint",
             "FIGCHAIN_VAULT_PATH_STYLE_ACCESS": "vault_path_style_access",
-            "FIGCHAIN_VAULT_PATH_STYLE_ACCESS": "vault_path_style_access",
             "FIGCHAIN_VAULT_PRIVATE_KEY_PATH": "vault_private_key_path",
             "FIGCHAIN_ENCRYPTION_PRIVATE_KEY_PATH": "encryption_private_key_path",
             "FIGCHAIN_AUTH_PRIVATE_KEY_PATH": "auth_private_key_path",

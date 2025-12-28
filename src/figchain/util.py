@@ -14,7 +14,7 @@ def load_rsa_private_key(path: str) -> rsa.RSAPrivateKey:
     except FileNotFoundError:
         logger.error(f"Private key file not found: {path}")
         raise
-    except Exception as e:
+    except (IOError, OSError) as e:
         logger.error(f"Failed to read private key file {path}: {e}")
         raise
 
@@ -27,6 +27,6 @@ def parse_rsa_private_key(key_bytes: bytes) -> rsa.RSAPrivateKey:
             key_bytes,
             password=None
         )
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         logger.error(f"Failed to parse private key: {e}")
         raise

@@ -15,7 +15,6 @@ from .bootstrap.vault import VaultStrategy
 from .bootstrap.hybrid import HybridStrategy
 from .bootstrap.fallback import FallbackStrategy
 from .vault.service import VaultService
-from .vault.service import VaultService
 from .encryption.service import EncryptionService
 from .auth import TokenProvider, SharedSecretTokenProvider, PrivateKeyTokenProvider
 from .util import load_rsa_private_key
@@ -70,8 +69,7 @@ class FigChainClient:
             private_key = load_rsa_private_key(config.auth_private_key_path)
             # Use environment_id as service_account_id for now if not provided
             service_account_id = config.auth_client_id if config.auth_client_id else config.environment_id
-            # Determine Tenant ID (could config or default)
-            tenant_id = getattr(config, 'tenant_id', 'default') # Assuming added to config or default
+            tenant_id = config.tenant_id
             namespace = config.namespaces[0] if config.namespaces else None
             token_provider = PrivateKeyTokenProvider(private_key, service_account_id, tenant_id=tenant_id, namespace=namespace)
         else:
@@ -170,7 +168,7 @@ class FigChainClient:
                                 if fig.isEncrypted:
                                     if not self.encryption_service:
                                         logger.error(f"Listener received encrypted fig for key '{key}' but client is not configured for decryption")
-                                        return
+                                        continue
                                     payload = self.encryption_service.decrypt(fig, family.definition.namespace)
 
                                 schema_name = result_type.__name__

@@ -4,10 +4,10 @@ from typing import Optional
 @dataclass
 class UserPublicKey:
     email: str
-    publicKey: str
+    public_key: str
     algorithm: str
 
 @dataclass
 class NamespaceKey:
-    wrappedKey: str
-    keyId: str
+    wrapped_key: str
+    key_id: str

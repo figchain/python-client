@@ -1,16 +1,7 @@
-import base64
-import hashlib
-import os
-from typing import Optional
-
-try:
-    from cryptography.hazmat.primitives import serialization, hashes
-    from cryptography.hazmat.primitives.asymmetric import rsa, padding
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-    from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
-except ImportError:
-    # Just a placeholder if dependencies aren't installed, but they should be for this feature
-    pass
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
 
 from ..util import load_rsa_private_key
 

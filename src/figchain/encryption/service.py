@@ -48,7 +48,7 @@ class EncryptionService:
 
             matching_key = None
             for key in ns_keys:
-                if key.keyId == key_id:
+                if key.key_id == key_id:
                     matching_key = key
                     break
 
@@ -57,17 +57,17 @@ class EncryptionService:
                     # Fallback to first if no ID requested
                     matching_key = ns_keys[0]
                 else:
-                    raise StopIteration
+                    raise ValueError(f"No matching key found for namespace {namespace} and keyId {key_id}")
 
-            wrapped_key_bytes = base64.b64decode(matching_key.wrappedKey)
+            wrapped_key_bytes = base64.b64decode(matching_key.wrapped_key)
             unwrapped_nsk = crypto.decrypt_rsa_oaep(wrapped_key_bytes, self.private_key)
 
-            if matching_key.keyId:
-                self.nsk_cache[matching_key.keyId] = unwrapped_nsk
+            if matching_key.key_id:
+                self.nsk_cache[matching_key.key_id] = unwrapped_nsk
 
             return unwrapped_nsk
-        except StopIteration:
-            raise ValueError(f"No matching key found for namespace {namespace} and keyId {key_id}")
+        except ValueError:
+            raise
         except Exception as e:
             logger.error(f"Failed to fetch/decrypt NSK for namespace {namespace}: {e}")
             raise

@@ -1,8 +1,6 @@
 import jwt
-import time
 import abc
 from datetime import datetime, timedelta
-from cryptography.hazmat.primitives import serialization
 
 class TokenProvider(abc.ABC):
     @abc.abstractmethod
