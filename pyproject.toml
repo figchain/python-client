@@ -44,3 +44,4 @@ figchain = ["*.avsc"]
 
 [tool.setuptools_scm]
 write_to = "src/figchain/version.py"
+local_scheme = "no-local-version"
