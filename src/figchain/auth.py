@@ -1,6 +1,6 @@
 import jwt
 import abc
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 class TokenProvider(abc.ABC):
     @abc.abstractmethod
@@ -25,7 +25,7 @@ class PrivateKeyTokenProvider(TokenProvider):
         self.token_ttl = timedelta(minutes=token_ttl_minutes)
 
     def get_token(self) -> str:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         payload = {
             "iss": self.service_account_id,
             "sub": self.service_account_id,

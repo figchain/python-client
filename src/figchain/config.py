@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import yaml
 from dataclasses import dataclass, field
 from typing import Set, Optional, List
@@ -76,17 +77,48 @@ class Config:
         # 1. Defaults (handled by dataclass)
         config_data = {}
 
-        # 2. YAML
+        # 2. Config file (YAML or JSON) - autodetect by extension or try both
+        def _load_from_file(p: str):
+            with open(p, 'r') as f:
+                if p.lower().endswith('.json'):
+                    data = json.load(f) or {}
+                else:
+                    # default to YAML parsing (safe for JSON too in many cases)
+                    data = yaml.safe_load(f) or {}
+            cls._map_legacy_keys(data)
+            return data
+
         if path:
-            with open(path, 'r') as f:
-                yaml_data = yaml.safe_load(f) or {}
-                cls._map_legacy_keys(yaml_data)
-                config_data.update(yaml_data)
-        elif os.path.exists("figchain.yaml"):
-            with open("figchain.yaml", 'r') as f:
-                yaml_data = yaml.safe_load(f) or {}
-                cls._map_legacy_keys(yaml_data)
-                config_data.update(yaml_data)
+            # If extension present, prefer it; otherwise try YAML then JSON
+            _, ext = os.path.splitext(path)
+            if ext.lower() == '.json':
+                try:
+                    config_data.update(_load_from_file(path))
+                except Exception:
+                    # try YAML fallback
+                    try:
+                        with open(path, 'r') as f:
+                            config_data.update(yaml.safe_load(f) or {})
+                    except Exception:
+                        raise
+            else:
+                try:
+                    config_data.update(_load_from_file(path))
+                except Exception:
+                    # try JSON as fallback
+                    try:
+                        with open(path, 'r') as f:
+                            config_data.update(json.load(f) or {})
+                    except Exception:
+                        raise
+        else:
+            # look for common filenames
+            if os.path.exists('figchain.yaml'):
+                config_data.update(_load_from_file('figchain.yaml'))
+            elif os.path.exists('figchain.yml'):
+                config_data.update(_load_from_file('figchain.yml'))
+            elif os.path.exists('figchain.json'):
+                config_data.update(_load_from_file('figchain.json'))
 
         # 3. Environment Variables
         env_map = {
