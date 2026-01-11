@@ -41,6 +41,31 @@ class Config:
     auth_client_id: Optional[str] = None
     auth_credential_id: Optional[str] = None
 
+    @staticmethod
+    def _map_legacy_keys(yaml_data: dict) -> None:
+        """
+        Maps camelCase keys from JSON/YAML to snake_case for the internal Config object.
+        Also handles legacy field mapping like 'namespace' to 'namespaces'.
+        """
+        key_map = {
+            "credentialId": "auth_credential_id",
+            "privateKey": "auth_private_key_pem",
+            "tenantId": "tenant_id",
+            "environmentId": "environment_id"
+        }
+        for camel, snake in key_map.items():
+            if camel in yaml_data:
+                yaml_data[snake] = yaml_data.pop(camel)
+
+        if "namespace" in yaml_data:
+            ns = yaml_data.pop("namespace")
+            if "namespaces" not in yaml_data:
+                yaml_data["namespaces"] = [ns]
+
+        if "backup" in yaml_data:
+            # Ignore or map backup if needed
+            yaml_data.pop("backup")
+
     @classmethod
     def load(cls, path: Optional[str] = None, **kwargs) -> 'Config':
         """
@@ -55,27 +80,12 @@ class Config:
         if path:
             with open(path, 'r') as f:
                 yaml_data = yaml.safe_load(f) or {}
-                # Map camelCase keys from JSON/YAML to snake_case config_data
-                if "credentialId" in yaml_data:
-                    yaml_data["auth_credential_id"] = yaml_data.pop("credentialId")
-                if "privateKey" in yaml_data:
-                    yaml_data["auth_private_key_pem"] = yaml_data.pop("privateKey")
-                if "namespace" in yaml_data:
-                    ns = yaml_data.pop("namespace")
-                    if "namespaces" not in yaml_data:
-                        yaml_data["namespaces"] = [ns]
-                if "tenantId" in yaml_data:
-                    yaml_data["tenant_id"] = yaml_data.pop("tenantId")
-                if "environmentId" in yaml_data:
-                    yaml_data["environment_id"] = yaml_data.pop("environmentId")
-                if "backup" in yaml_data:
-                    # Ignore or map backup if needed
-                    yaml_data.pop("backup")
-
+                cls._map_legacy_keys(yaml_data)
                 config_data.update(yaml_data)
         elif os.path.exists("figchain.yaml"):
             with open("figchain.yaml", 'r') as f:
                 yaml_data = yaml.safe_load(f) or {}
+                cls._map_legacy_keys(yaml_data)
                 config_data.update(yaml_data)
 
         # 3. Environment Variables

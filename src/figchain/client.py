@@ -105,8 +105,7 @@ class FigChainClient:
         token_provider: TokenProvider
         if config.auth_private_key_path or config.auth_private_key_pem:
             if config.namespaces and len(config.namespaces) > 1:
-                # Zero-trust credentials are typically scoped to a namespace, but checking is relaxed for now.
-                pass
+                raise ValueError("Private key authentication can only be used with a single namespace")
 
             private_key = None
             if config.auth_private_key_pem:
@@ -115,11 +114,7 @@ class FigChainClient:
                 private_key = load_rsa_private_key(config.auth_private_key_path)
 
             # Use environment_id as service_account_id for now if not provided
-            service_account_id = config.auth_client_id
-            if not service_account_id and config.auth_credential_id:
-                service_account_id = config.auth_credential_id
-            if not service_account_id:
-                service_account_id = config.environment_id
+            service_account_id = config.auth_client_id or config.auth_credential_id or config.environment_id
             tenant_id = config.tenant_id
             namespace = next(iter(config.namespaces)) if config.namespaces else None
 
