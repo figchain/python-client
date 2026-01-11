@@ -19,11 +19,52 @@ from .encryption.service import EncryptionService
 from .auth import TokenProvider, SharedSecretTokenProvider, PrivateKeyTokenProvider
 from .util import load_rsa_private_key
 
+import json
+import os
+
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
 
 class FigChainClient:
+    @classmethod
+    def from_config(cls, path: str, **kwargs) -> 'FigChainClient':
+        """
+        Creates a FigChainClient from a client-config.json file.
+        """
+        with open(path, 'r') as f:
+            data = json.load(f)
+
+        # Map fields from client-config.json to Config
+        cfg = Config()
+
+        # 1. Namespace
+        if "namespace" in data:
+            cfg.namespaces = {data["namespace"]}
+
+        # 2. Private Key
+        if "privateKey" in data:
+            cfg.auth_private_key_pem = data["privateKey"]
+
+        # 3. Credential ID
+        if "credentialId" in data:
+            cfg.auth_credential_id = data["credentialId"]
+
+        # 5. Load standard config first to get env vars, then overlay our json values
+        base_config = Config.load(**kwargs)
+
+        # Update base_config with json values only if not already set (Env/Defaults)
+        if not base_config.namespaces and cfg.namespaces:
+            base_config.namespaces = cfg.namespaces
+
+        if not base_config.auth_private_key_pem and not base_config.auth_private_key_path and cfg.auth_private_key_pem:
+            base_config.auth_private_key_pem = cfg.auth_private_key_pem
+
+        if not base_config.auth_credential_id and cfg.auth_credential_id:
+            base_config.auth_credential_id = cfg.auth_credential_id
+
+        return cls(config=base_config)
+
     def __init__(self,
                  base_url: Optional[str] = None,
                  client_secret: Optional[str] = None,
@@ -57,21 +98,30 @@ class FigChainClient:
         if not config.environment_id:
             raise ValueError("Environment ID is required")
 
-        if not config.client_secret and not config.auth_private_key_path:
-            raise ValueError("Client secret or Auth private key is required")
+        if not config.client_secret and not config.auth_private_key_path and not config.auth_private_key_pem:
+            raise ValueError("Client secret or Auth private key (path or PEM) is required")
 
         # 3. Initialize Components
         token_provider: TokenProvider
-        if config.auth_private_key_path:
+        if config.auth_private_key_path or config.auth_private_key_pem:
             if config.namespaces and len(config.namespaces) > 1:
                 raise ValueError("Private key authentication can only be used with a single namespace")
 
-            private_key = load_rsa_private_key(config.auth_private_key_path)
+            private_key = None
+            if config.auth_private_key_pem:
+                private_key = config.auth_private_key_pem
+            else:
+                private_key = load_rsa_private_key(config.auth_private_key_path)
+
             # Use environment_id as service_account_id for now if not provided
-            service_account_id = config.auth_client_id if config.auth_client_id else config.environment_id
+            service_account_id = config.auth_client_id or config.auth_credential_id or config.environment_id
             tenant_id = config.tenant_id
             namespace = next(iter(config.namespaces)) if config.namespaces else None
-            token_provider = PrivateKeyTokenProvider(private_key, service_account_id, tenant_id=tenant_id, namespace=namespace)
+
+            # Extract key_id (credentialId) from config
+            key_id = config.auth_credential_id
+
+            token_provider = PrivateKeyTokenProvider(private_key, service_account_id, tenant_id=tenant_id, namespace=namespace, key_id=key_id)
         else:
             token_provider = SharedSecretTokenProvider(config.client_secret)
 
