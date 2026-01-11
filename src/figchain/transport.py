@@ -68,14 +68,21 @@ class Transport:
         return deserialize_ocf(resp.content, "UpdateFetchResponse", UpdateFetchResponse)
 
     def get_namespace_key(self, namespace: str) -> List[NamespaceKey]:
-        url = f"{self.base_url}/keys/namespace/{urllib.parse.quote(namespace)}"
+        url = f"{self.base_url}/envelopes"
         headers = {"Authorization": f"Bearer {self.token_provider.get_token()}"}
         resp = self.session.get(url, headers=headers, timeout=5)
         resp.raise_for_status()
 
         data = resp.json()
-        # Expecting a list of keys
-        return [NamespaceKey(wrapped_key=item['wrappedKey'], key_id=item['keyId']) for item in data]
+        keys = []
+        for item in data:
+            key_data = item.get('key', {})
+            if key_data.get('namespaceId') == namespace:
+                keys.append(NamespaceKey(
+                    wrapped_key=item['encryptedBlob'],
+                    key_id=str(key_data.get('nskVersion'))
+                ))
+        return keys
 
     def upload_public_key(self, key: UserPublicKey) -> None:
         url = f"{self.base_url}/keys/public"
