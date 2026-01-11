@@ -1,6 +1,5 @@
 import json
-import os
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 AVRO_TYPE_MAPPING = {
     "string": "str",
@@ -13,13 +12,14 @@ AVRO_TYPE_MAPPING = {
     "null": "None",
 }
 
+
 def resolve_type(type_def: Any, namespace: str) -> str:
     if isinstance(type_def, str):
         if type_def in AVRO_TYPE_MAPPING:
             return AVRO_TYPE_MAPPING[type_def]
         # Check if it's a fully qualified name or needs namespace
         if "." in type_def:
-             return type_def.split(".")[-1]
+            return type_def.split(".")[-1]
         return type_def  # Assumed to be a class name in the same file
 
     if isinstance(type_def, list):
@@ -37,7 +37,7 @@ def resolve_type(type_def: Any, namespace: str) -> str:
         elif base_type == "map":
             value_type = resolve_type(type_def.get("values"), namespace)
             return f"Dict[str, {value_type}]"
-        
+
         logical_type = type_def.get("logicalType")
         if logical_type == "uuid":
             return "uuid.UUID"
@@ -45,13 +45,14 @@ def resolve_type(type_def: Any, namespace: str) -> str:
             return "datetime"
         elif logical_type == "uri":
             return "str"
-        
+
         # If it's a nested record definition (though usually defined at top level), handle it?
         # Assuming flattened definitions for now as per the schema list.
         if base_type in AVRO_TYPE_MAPPING:
             return AVRO_TYPE_MAPPING[base_type]
-            
+
     return "Any"
+
 
 def generate_code(schema_path: str, output_path: str):
     with open(schema_path, "r") as f:
@@ -77,11 +78,11 @@ def generate_code(schema_path: str, output_path: str):
         type_name = schema["type"]
         name = schema["name"]
         namespace = schema.get("namespace", "")
-        
+
         if type_name == "enum":
             lines.append(f"class {name}(str, Enum):")
             for symbol in schema["symbols"]:
-                lines.append(f"    {symbol} = \"{symbol}\"")
+                lines.append(f'    {symbol} = "{symbol}"')
             lines.append("")
 
         elif type_name == "record":
@@ -90,27 +91,27 @@ def generate_code(schema_path: str, output_path: str):
             fields = schema.get("fields", [])
             if not fields:
                 lines.append("    pass")
-            
+
             for field_def in fields:
                 field_name = field_def["name"]
                 field_type = resolve_type(field_def["type"], namespace)
-                
+
                 # Handle defaults
                 default_val = field_def.get("default", ...)
-                
+
                 default_str = ""
                 if default_val is not ...:
                     if default_val is None:
                         default_str = " = None"
                     elif isinstance(default_val, list) and len(default_val) == 0:
-                         default_str = " = field(default_factory=list)"
+                        default_str = " = field(default_factory=list)"
                     elif isinstance(default_val, dict) and len(default_val) == 0:
-                         default_str = " = field(default_factory=dict)"
+                        default_str = " = field(default_factory=dict)"
                     elif isinstance(default_val, str):
-                        default_str = f" = \"{default_val}\""
+                        default_str = f' = "{default_val}"'
                     else:
                         default_str = f" = {default_val}"
-                
+
                 lines.append(f"    {field_name}: {field_type}{default_str}")
             lines.append("")
 
@@ -118,8 +119,10 @@ def generate_code(schema_path: str, output_path: str):
         f.write("\n".join(lines))
     print(f"Generated {output_path}")
 
+
 if __name__ == "__main__":
     import sys
+
     if len(sys.argv) < 3:
         print("Usage: generate_models.py <schema_file> <output_file>")
         sys.exit(1)

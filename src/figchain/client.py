@@ -5,7 +5,7 @@ import uuid
 from typing import Set, Optional, Dict, List, Type, Callable, TypeVar, Any
 
 from .config import Config, BootstrapStrategy
-from .models import Fig, FigFamily
+from .models import FigFamily
 from .transport import Transport
 from .store import Store
 from .evaluation import Evaluator, Context
@@ -20,19 +20,19 @@ from .auth import TokenProvider, SharedSecretTokenProvider, PrivateKeyTokenProvi
 from .util import load_rsa_private_key
 
 import json
-import os
 
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
 
+
 class FigChainClient:
     @classmethod
-    def from_config(cls, path: str, **kwargs) -> 'FigChainClient':
+    def from_config(cls, path: str, **kwargs) -> "FigChainClient":
         """
         Creates a FigChainClient from a client-config.json file.
         """
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             data = json.load(f)
 
         # Map fields from client-config.json to Config
@@ -57,7 +57,11 @@ class FigChainClient:
         if not base_config.namespaces and cfg.namespaces:
             base_config.namespaces = cfg.namespaces
 
-        if not base_config.auth_private_key_pem and not base_config.auth_private_key_path and cfg.auth_private_key_pem:
+        if (
+            not base_config.auth_private_key_pem
+            and not base_config.auth_private_key_path
+            and cfg.auth_private_key_pem
+        ):
             base_config.auth_private_key_pem = cfg.auth_private_key_pem
 
         if not base_config.auth_credential_id and cfg.auth_credential_id:
@@ -65,25 +69,36 @@ class FigChainClient:
 
         return cls(config=base_config)
 
-    def __init__(self,
-                 base_url: Optional[str] = None,
-                 client_secret: Optional[str] = None,
-                 environment_id: Optional[str] = None,
-                 namespaces: Optional[Set[str]] = None,
-                 as_of: Optional[datetime] = None,
-                 poll_interval: Optional[int] = None,
-                 config: Optional[Config] = None):
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        environment_id: Optional[str] = None,
+        namespaces: Optional[Set[str]] = None,
+        as_of: Optional[datetime] = None,
+        poll_interval: Optional[int] = None,
+        config: Optional[Config] = None,
+    ):
 
         # 1. Load Configuration
         if config is None:
             config = Config.load()
 
         # 2. Override with explicit args
-        if base_url: config.base_url = base_url
-        if client_secret: config.client_secret = client_secret
-        if environment_id: config.environment_id = environment_id
-        if namespaces: config.namespaces = namespaces
-        if poll_interval is not None: config.poll_interval = poll_interval
+        if base_url:
+            config.base_url = base_url
+
+        if client_secret:
+            config.client_secret = client_secret
+
+        if environment_id:
+            config.environment_id = environment_id
+
+        if namespaces:
+            config.namespaces = namespaces
+
+        if poll_interval is not None:
+            config.poll_interval = poll_interval
 
         self.config = config
         self.namespaces = config.namespaces
@@ -92,20 +107,28 @@ class FigChainClient:
 
         as_of_dt = as_of
         if as_of_dt is None and config.as_of:
-            as_of_dt = datetime.fromisoformat(config.as_of.replace('Z', '+00:00'))
+            as_of_dt = datetime.fromisoformat(config.as_of.replace("Z", "+00:00"))
         self.as_of = as_of_dt
 
         if not config.environment_id:
             raise ValueError("Environment ID is required")
 
-        if not config.client_secret and not config.auth_private_key_path and not config.auth_private_key_pem:
-            raise ValueError("Client secret or Auth private key (path or PEM) is required")
+        if (
+            not config.client_secret
+            and not config.auth_private_key_path
+            and not config.auth_private_key_pem
+        ):
+            raise ValueError(
+                "Client secret or Auth private key (path or PEM) is required"
+            )
 
         # 3. Initialize Components
         token_provider: TokenProvider
         if config.auth_private_key_path or config.auth_private_key_pem:
             if config.namespaces and len(config.namespaces) > 1:
-                raise ValueError("Private key authentication can only be used with a single namespace")
+                raise ValueError(
+                    "Private key authentication can only be used with a single namespace"
+                )
 
             private_key = None
             if config.auth_private_key_pem:
@@ -114,18 +137,30 @@ class FigChainClient:
                 private_key = load_rsa_private_key(config.auth_private_key_path)
 
             # Use environment_id as service_account_id for now if not provided
-            service_account_id = config.auth_client_id or config.auth_credential_id or config.environment_id
+            service_account_id = (
+                config.auth_client_id
+                or config.auth_credential_id
+                or config.environment_id
+            )
             tenant_id = config.tenant_id
             namespace = next(iter(config.namespaces)) if config.namespaces else None
 
             # Extract key_id (credentialId) from config
             key_id = config.auth_credential_id
 
-            token_provider = PrivateKeyTokenProvider(private_key, service_account_id, tenant_id=tenant_id, namespace=namespace, key_id=key_id)
+            token_provider = PrivateKeyTokenProvider(
+                private_key,
+                service_account_id,
+                tenant_id=tenant_id,
+                namespace=namespace,
+                key_id=key_id,
+            )
         else:
             token_provider = SharedSecretTokenProvider(config.client_secret)
 
-        self.transport = Transport(config.base_url, token_provider, uuid.UUID(config.environment_id))
+        self.transport = Transport(
+            config.base_url, token_provider, uuid.UUID(config.environment_id)
+        )
         self.store = Store()
         self.evaluator = Evaluator()
 
@@ -137,7 +172,9 @@ class FigChainClient:
         self.encryption_service: Optional[EncryptionService] = None
 
         if config.encryption_private_key_path:
-            self.encryption_service = EncryptionService(self.transport, config.encryption_private_key_path)
+            self.encryption_service = EncryptionService(
+                self.transport, config.encryption_private_key_path
+            )
 
         # 4. Bootstrap Strategy
         server_strategy = ServerStrategy(self.transport, self.as_of)
@@ -149,16 +186,23 @@ class FigChainClient:
             if config.bootstrap_strategy == BootstrapStrategy.VAULT:
                 self.bootstrap_strategy = vault_strategy
             elif config.bootstrap_strategy == BootstrapStrategy.HYBRID:
-                self.bootstrap_strategy = HybridStrategy(vault_strategy, server_strategy, self.transport)
+                self.bootstrap_strategy = HybridStrategy(
+                    vault_strategy, server_strategy, self.transport
+                )
             elif config.bootstrap_strategy == BootstrapStrategy.SERVER:
                 # Explicitly server only, despite vault enabled generally
                 self.bootstrap_strategy = server_strategy
-            else: # SERVER_FIRST or Default
-                self.bootstrap_strategy = FallbackStrategy(server_strategy, vault_strategy)
+            else:
+                # SERVER_FIRST or Default
+                self.bootstrap_strategy = FallbackStrategy(
+                    server_strategy, vault_strategy
+                )
         else:
             self.bootstrap_strategy = server_strategy
 
-        logger.info(f"Bootstrapping with strategy: {self.bootstrap_strategy.__class__.__name__}")
+        logger.info(
+            f"Bootstrapping with strategy: {self.bootstrap_strategy.__class__.__name__}"
+        )
 
         # 5. Execute Bootstrap
         try:
@@ -173,7 +217,9 @@ class FigChainClient:
         self._start_poller()
 
     def _start_poller(self):
-        self._poller_thread = threading.Thread(target=self._poll_loop, daemon=True, name="FigChainPoller")
+        self._poller_thread = threading.Thread(
+            target=self._poll_loop, daemon=True, name="FigChainPoller"
+        )
         self._poller_thread.start()
 
     def _poll_loop(self):
@@ -189,7 +235,9 @@ class FigChainClient:
                     resp = self.transport.fetch_updates(ns, cursor)
 
                     if resp.figFamilies:
-                        logger.debug(f"Received {len(resp.figFamilies)} updates for {ns}")
+                        logger.debug(
+                            f"Received {len(resp.figFamilies)} updates for {ns}"
+                        )
                         self.store.put_all(resp.figFamilies)
                         self._notify_listeners(resp.figFamilies)
 
@@ -217,17 +265,25 @@ class FigChainClient:
                                 payload = fig.payload
                                 if fig.isEncrypted:
                                     if not self.encryption_service:
-                                        logger.error(f"Listener received encrypted fig for key '{key}' but client is not configured for decryption")
+                                        logger.error(
+                                            f"Listener received encrypted fig for key '{key}' but client is not configured for decryption"
+                                        )
                                         continue
-                                    payload = self.encryption_service.decrypt(fig, family.definition.namespace)
+                                    payload = self.encryption_service.decrypt(
+                                        fig, family.definition.namespace
+                                    )
 
                                 schema_name = result_type.__name__
                                 val = deserialize(payload, schema_name, result_type)
                                 callback(val)
                             except Exception as e:
-                                logger.error(f"Failed to notify listener for {key}: {e}")
+                                logger.error(
+                                    f"Failed to notify listener for {key}: {e}"
+                                )
 
-    def register_listener(self, key: str, callback: Callable[[T], None], result_type: Type[T]):
+    def register_listener(
+        self, key: str, callback: Callable[[T], None], result_type: Type[T]
+    ):
         """
         Register a listener for updates to a specific Fig key.
         The callback will be invoked with the deserialized object when an update occurs.
@@ -243,12 +299,14 @@ class FigChainClient:
                 self._listeners[key] = []
             self._listeners[key].append((callback, result_type))
 
-    def get_fig(self,
-                key: str,
-                result_type: Type[T],
-                context: Context = {},
-                namespace: Optional[str] = None,
-                default_value: Optional[T] = None) -> Optional[T]:
+    def get_fig(
+        self,
+        key: str,
+        result_type: Type[T],
+        context: Context = {},
+        namespace: Optional[str] = None,
+        default_value: Optional[T] = None,
+    ) -> Optional[T]:
 
         if namespace is None:
             if len(self.namespaces) == 1:
@@ -279,7 +337,9 @@ class FigChainClient:
             payload = fig.payload
             if fig.isEncrypted:
                 if not self.encryption_service:
-                    raise ValueError(f"Received encrypted fig for key '{key}' but client is not configured for decryption")
+                    raise ValueError(
+                        f"Received encrypted fig for key '{key}' but client is not configured for decryption"
+                    )
                 payload = self.encryption_service.decrypt(fig, namespace)
 
             schema_info = result_type.__name__

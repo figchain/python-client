@@ -4,7 +4,9 @@ import importlib.util
 from pathlib import Path
 
 # Load Config module directly to avoid importing the whole package (tests run without deps)
-spec = importlib.util.spec_from_file_location("figchain.config", str(Path(__file__).parents[1] / "src" / "figchain" / "config.py"))
+spec = importlib.util.spec_from_file_location(
+    "figchain.config", str(Path(__file__).parents[1] / "src" / "figchain" / "config.py")
+)
 config_mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(config_mod)
 Config = config_mod.Config
@@ -58,3 +60,4 @@ def test_load_no_ext_try_yaml_then_json(tmp_path):
     cfg2 = Config.load(path=str(f))
     assert cfg2.base_url == "https://fallback.example/"
     assert cfg2.environment_id == "env-xyz"
+    assert set(cfg2.namespaces) == {"a"}

@@ -2,6 +2,7 @@ from typing import List
 from .strategy import BootstrapStrategy, BootstrapResult
 from ..vault.service import VaultService
 
+
 class VaultStrategy(BootstrapStrategy):
     def __init__(self, vault_service: VaultService):
         self.vault_service = vault_service

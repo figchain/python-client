@@ -13,7 +13,21 @@ Thank you for your interest in contributing!
 2. **Create and activate a virtual environment:**
     ```bash
     python3 -m venv venv
+    ```
+
+    On macOS/Linux:
+    ```bash
     source venv/bin/activate
+    ```
+
+    On Windows (cmd.exe):
+    ```cmd
+    venv\Scripts\activate.bat
+    ```
+
+    On Windows (PowerShell):
+    ```powershell
+    venv\Scripts\Activate.ps1
     ```
 
 3. **Install dependencies (including dev tools):**

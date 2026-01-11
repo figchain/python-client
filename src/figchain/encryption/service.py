@@ -1,11 +1,12 @@
 import base64
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, Optional
 from ..transport import Transport
 from ..models import Fig
 from . import crypto
 
 logger = logging.getLogger(__name__)
+
 
 class EncryptionService:
     def __init__(self, transport: Transport, private_key_path: str):
@@ -53,7 +54,9 @@ class EncryptionService:
                     # Fallback to first if no ID requested
                     matching_key = ns_keys[0]
                 else:
-                    raise ValueError(f"No matching key found for namespace {namespace} and keyId {key_id}")
+                    raise ValueError(
+                        f"No matching key found for namespace {namespace} and keyId {key_id}"
+                    )
 
             wrapped_key_bytes = base64.b64decode(matching_key.wrapped_key)
             unwrapped_nsk = crypto.decrypt_rsa_oaep(wrapped_key_bytes, self.private_key)
