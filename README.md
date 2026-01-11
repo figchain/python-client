@@ -24,7 +24,7 @@ pip install figchain
 from figchain import FigChainClient, Context
 
 # Your generated config class (see "Generating Models")
-from my_app.models import MyConfig 
+from my_app.models import MyConfig
 
 # Initialize the client
 client = FigChainClient(
@@ -66,16 +66,16 @@ python3 scripts/generate_models.py path/to/schema.avsc path/to/output_models.py
 ## Development
 
 1. **Setup Environment**:
-   ```bash
-   python3 -m venv venv
-   . venv/bin/activate
-   pip install -e .[dev]
-   ```
+    ```bash
+    python3 -m venv venv
+    . venv/bin/activate
+    pip install -e .[dev]
+    ```
 
 2. **Run Tests**:
-   ```bash
-   pytest
-   ```
+    ```bash
+    pytest
+    ```
 
 ## License
 

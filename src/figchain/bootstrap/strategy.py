@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional
+from typing import List, Dict
 from dataclasses import dataclass
 from ..models import FigFamily
+
 
 @dataclass
 class BootstrapResult:
     fig_families: List[FigFamily]
     cursors: Dict[str, str]
+
 
 class BootstrapStrategy(ABC):
     @abstractmethod

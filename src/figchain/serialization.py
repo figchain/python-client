@@ -5,7 +5,7 @@ import uuid
 import datetime
 import os
 from enum import Enum
-from typing import Type, TypeVar, Any, Dict, List, Set, get_type_hints, Union, Optional
+from typing import Type, TypeVar, Any, Dict, List, Set, get_type_hints, Union
 import avro.schema
 import avro.io
 import avro.datafile
@@ -13,11 +13,14 @@ from . import models
 
 T = TypeVar("T")
 
+
 class _NonClosingBytesIO(io.BytesIO):
     def close(self):
         pass
+
     def actual_close(self):
         super().close()
+
 
 # Global Names object to track all schemas
 _NAMES = avro.schema.Names()
@@ -29,16 +32,19 @@ if os.path.exists(_SCHEMA_PATH):
         # Parsing into _NAMES allows looking up types by name later
         avro.schema.make_avsc_object(json.load(f), _NAMES)
 
+
 def register_schema(schema_json: Any):
     # This allows adding new schemas (like UserConfig in tests) to the global registry
     avro.schema.make_avsc_object(schema_json, _NAMES)
+
 
 def register_schema_from_file(path: str):
     with open(path, "r") as f:
         register_schema(json.load(f))
 
+
 def get_schema(name: str) -> avro.schema.Schema:
-    if isinstance(name, str) and (name.startswith('{') or name.startswith('"')):
+    if isinstance(name, str) and (name.startswith("{") or name.startswith('"')):
         return avro.schema.parse(name)
 
     # Try full name and short name
@@ -57,6 +63,7 @@ def get_schema(name: str) -> avro.schema.Schema:
         raise ValueError(f"Schema {name} not found")
 
     return schema
+
 
 def _to_avro_friendly(obj: Any) -> Any:
     if dataclasses.is_dataclass(obj):
@@ -83,6 +90,7 @@ def _to_avro_friendly(obj: Any) -> Any:
     elif isinstance(obj, models.Operator):
         return obj.value
     return obj
+
 
 def _from_avro_friendly(data: Any, cls: Type[T]) -> T:
     if data is None:
@@ -127,6 +135,7 @@ def _from_avro_friendly(data: Any, cls: Type[T]) -> T:
 
     return data
 
+
 def serialize(obj: Any, schema_name: str) -> bytes:
     """Serializes an object to raw Avro binary."""
     schema = get_schema(schema_name)
@@ -136,6 +145,7 @@ def serialize(obj: Any, schema_name: str) -> bytes:
     writer.write(_to_avro_friendly(obj), encoder)
     return bytes_writer.getvalue()
 
+
 def deserialize(data: bytes, schema_name: str, cls: Type[T]) -> T:
     """Deserializes an object from raw Avro binary."""
     schema = get_schema(schema_name)
@@ -144,6 +154,7 @@ def deserialize(data: bytes, schema_name: str, cls: Type[T]) -> T:
     decoder = avro.io.BinaryDecoder(bytes_reader)
     datum = reader.read(decoder)
     return _from_avro_friendly(datum, cls)
+
 
 def serialize_ocf(obj: Any, schema_name: str) -> bytes:
     """Serializes an object to Avro Object Container File (OCF) format."""
@@ -155,6 +166,7 @@ def serialize_ocf(obj: Any, schema_name: str) -> bytes:
     res = bytes_writer.getvalue()
     bytes_writer.actual_close()
     return res
+
 
 def deserialize_ocf(data: bytes, schema_name: str, cls: Type[T]) -> T:
     """Deserializes an object from Avro Object Container File (OCF) format."""

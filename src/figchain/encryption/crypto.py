@@ -1,18 +1,21 @@
-from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
 
 from ..util import load_rsa_private_key
 
+
 def load_private_key(path: str) -> rsa.RSAPrivateKey:
     return load_rsa_private_key(path)
+
 
 def unwrap_aes_key(wrapped_key: bytes, kek: bytes) -> bytes:
     """
     Unwraps an AES key using RFC 3394 AES Key Wrap.
     """
     return aes_key_unwrap(kek, wrapped_key)
+
 
 def decrypt_rsa_oaep(encrypted_bytes: bytes, private_key: rsa.RSAPrivateKey) -> bytes:
     """
@@ -23,9 +26,10 @@ def decrypt_rsa_oaep(encrypted_bytes: bytes, private_key: rsa.RSAPrivateKey) -> 
         padding.OAEP(
             mgf=padding.MGF1(algorithm=hashes.SHA256()),
             algorithm=hashes.SHA256(),
-            label=None
-        )
+            label=None,
+        ),
     )
+
 
 def decrypt_aes_gcm(encrypted_bytes: bytes, key: bytes) -> bytes:
     """
@@ -33,7 +37,7 @@ def decrypt_aes_gcm(encrypted_bytes: bytes, key: bytes) -> bytes:
     Expected format: IV (12 bytes) + Ciphertext + Tag (16 bytes, appended by GCM)
     python cryptography GCM expects tag to be appended to ciphertext, which matches Java GCM default.
     """
-    if len(encrypted_bytes) < 28: # 12 IV + 16 Tag
+    if len(encrypted_bytes) < 28:  # 12 IV + 16 Tag
         raise ValueError("Encrypted data too short")
 
     iv = encrypted_bytes[:12]
@@ -48,4 +52,3 @@ def decrypt_aes_gcm(encrypted_bytes: bytes, key: bytes) -> bytes:
     ).decryptor()
 
     return decryptor.update(actual_ciphertext) + decryptor.finalize()
-

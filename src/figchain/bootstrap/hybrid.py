@@ -5,8 +5,14 @@ from ..transport import Transport
 
 logger = logging.getLogger(__name__)
 
+
 class HybridStrategy(BootstrapStrategy):
-    def __init__(self, vault_strategy: BootstrapStrategy, server_strategy: BootstrapStrategy, transport: Transport):
+    def __init__(
+        self,
+        vault_strategy: BootstrapStrategy,
+        server_strategy: BootstrapStrategy,
+        transport: Transport,
+    ):
         self.vault_strategy = vault_strategy
         self.server_strategy = server_strategy
         self.transport = transport
@@ -16,7 +22,9 @@ class HybridStrategy(BootstrapStrategy):
         try:
             vault_result = self.vault_strategy.bootstrap(namespaces)
         except Exception as e:
-            logger.warning(f"Vault bootstrap failed: {e}. Falling back to empty result.")
+            logger.warning(
+                f"Vault bootstrap failed: {e}. Falling back to empty result."
+            )
             vault_result = BootstrapResult([], {})
 
         # 2. Identify missing namespaces
@@ -27,7 +35,9 @@ class HybridStrategy(BootstrapStrategy):
 
         # 3. Fetch missing from Server
         if missing_namespaces:
-            logger.info(f"Fetching missing namespaces from server: {missing_namespaces}")
+            logger.info(
+                f"Fetching missing namespaces from server: {missing_namespaces}"
+            )
             try:
                 server_result = self.server_strategy.bootstrap(missing_namespaces)
                 all_families.extend(server_result.fig_families)

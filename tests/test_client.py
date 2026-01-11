@@ -1,7 +1,5 @@
 import threading
-import json
 import uuid
-import time
 from datetime import datetime
 import pytest
 from dataclasses import dataclass
@@ -11,10 +9,12 @@ from figchain import FigChainClient
 from figchain.models import InitialFetchResponse, FigFamily, FigDefinition, Fig
 from figchain.serialization import serialize, serialize_ocf, register_schema_from_file
 
+
 @dataclass
 class UserConfig:
     backgroundColor: str
     enabled: bool
+
 
 def test_client_e2e():
     # Register schema
@@ -36,26 +36,17 @@ def test_client_e2e():
         schemaUri="http://example.com/schema",
         schemaVersion="1.0",
         createdAt=datetime.now(),
-        updatedAt=datetime.now()
+        updatedAt=datetime.now(),
     )
 
-    fig = Fig(
-        figId=fig_def.figId,
-        version=uuid.uuid4(),
-        payload=payload
-    )
+    fig = Fig(figId=fig_def.figId, version=uuid.uuid4(), payload=payload)
 
     family = FigFamily(
-        definition=fig_def,
-        figs=[fig],
-        rules=[],
-        defaultVersion=fig.version
+        definition=fig_def, figs=[fig], rules=[], defaultVersion=fig.version
     )
 
     init_response = InitialFetchResponse(
-        figFamilies=[family],
-        cursor="cursor-1",
-        environmentId=env_id
+        figFamilies=[family], cursor="cursor-1", environmentId=env_id
     )
 
     # Mock Transport
@@ -70,21 +61,14 @@ def test_client_e2e():
         # Prepare an update response
         config_v2 = UserConfig(backgroundColor="blue", enabled=False)
         payload_v2 = serialize(config_v2, "UserConfig")
-        fig_v2 = Fig(
-            figId=fig_def.figId,
-            version=uuid.uuid4(),
-            payload=payload_v2
-        )
+        fig_v2 = Fig(figId=fig_def.figId, version=uuid.uuid4(), payload=payload_v2)
         family_v2 = FigFamily(
-            definition=fig_def,
-            figs=[fig_v2],
-            rules=[],
-            defaultVersion=fig_v2.version
+            definition=fig_def, figs=[fig_v2], rules=[], defaultVersion=fig_v2.version
         )
         from figchain.models import UpdateFetchResponse
+
         update_resp_obj = UpdateFetchResponse(
-            figFamilies=[family_v2],
-            cursor="cursor-2"
+            figFamilies=[family_v2], cursor="cursor-2"
         )
         mock_update_resp = MagicMock()
         mock_update_resp.status_code = 200
@@ -123,7 +107,7 @@ def test_client_e2e():
             client_secret="secret",
             environment_id=str(env_id),
             namespaces={namespace},
-            poll_interval=0.1 # fast poll
+            poll_interval=0.1,  # fast poll
         )
 
         # Test get_fig - should be initial state (red)

@@ -4,8 +4,11 @@ from .strategy import BootstrapStrategy, BootstrapResult
 
 logger = logging.getLogger(__name__)
 
+
 class FallbackStrategy(BootstrapStrategy):
-    def __init__(self, server_strategy: BootstrapStrategy, vault_strategy: BootstrapStrategy):
+    def __init__(
+        self, server_strategy: BootstrapStrategy, vault_strategy: BootstrapStrategy
+    ):
         self.server_strategy = server_strategy
         self.vault_strategy = vault_strategy
 

@@ -4,6 +4,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 logger = logging.getLogger(__name__)
 
+
 def load_rsa_private_key(path: str) -> rsa.RSAPrivateKey:
     """
     Loads an RSA private key from a PEM-encoded file.
@@ -18,15 +19,13 @@ def load_rsa_private_key(path: str) -> rsa.RSAPrivateKey:
         logger.error(f"Failed to read private key file {path}: {e}")
         raise
 
+
 def parse_rsa_private_key(key_bytes: bytes) -> rsa.RSAPrivateKey:
     """
     Parses an RSA private key from PEM-encoded bytes.
     """
     try:
-        return serialization.load_pem_private_key(
-            key_bytes,
-            password=None
-        )
+        return serialization.load_pem_private_key(key_bytes, password=None)
     except (ValueError, TypeError) as e:
         logger.error(f"Failed to parse private key: {e}")
         raise

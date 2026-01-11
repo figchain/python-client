@@ -1,15 +1,18 @@
 import os
 import sys
+import json
 import yaml
 from dataclasses import dataclass, field
-from typing import Set, Optional, List
+from typing import Set, Optional
 from enum import Enum
+
 
 class BootstrapStrategy(Enum):
     SERVER = "server"
     SERVER_FIRST = "server-first"
     VAULT = "vault"
     HYBRID = "hybrid"
+
 
 @dataclass
 class Config:
@@ -51,7 +54,7 @@ class Config:
             "credentialId": "auth_credential_id",
             "privateKey": "auth_private_key_pem",
             "tenantId": "tenant_id",
-            "environmentId": "environment_id"
+            "environmentId": "environment_id",
         }
         for camel, snake in key_map.items():
             if camel in yaml_data:
@@ -67,7 +70,7 @@ class Config:
             yaml_data.pop("backup")
 
     @classmethod
-    def load(cls, path: Optional[str] = None, **kwargs) -> 'Config':
+    def load(cls, path: Optional[str] = None, **kwargs) -> "Config":
         """
         Loads configuration from YAML (optional), Environment Variables, and kwargs.
         Precedence: kwargs > Env Vars > YAML > Defaults
@@ -76,17 +79,49 @@ class Config:
         # 1. Defaults (handled by dataclass)
         config_data = {}
 
-        # 2. YAML
+        # 2. Config file (YAML or JSON) - autodetect by extension or try both
+        def _load_from_file(p: str):
+            try:
+                with open(p, "r") as f:
+                    content = f.read()
+            except FileNotFoundError:
+                raise
+
+            _, ext = os.path.splitext(p)
+            ext = ext.lower()
+
+            # If extension is explicit, parse strictly according to it.
+            if ext == ".json":
+                data = json.loads(content) or {}
+            elif ext in (".yml", ".yaml"):
+                data = yaml.safe_load(content) or {}
+            else:
+                # No extension: try YAML first, then JSON as a fallback.
+                try:
+                    data = yaml.safe_load(content) or {}
+                except yaml.YAMLError as e_yaml:
+                    try:
+                        data = json.loads(content) or {}
+                    except json.JSONDecodeError:
+                        # Raise the original YAML error for clarity.
+                        raise e_yaml from None
+
+            if isinstance(data, dict):
+                cls._map_legacy_keys(data)
+            return data
+
         if path:
-            with open(path, 'r') as f:
-                yaml_data = yaml.safe_load(f) or {}
-                cls._map_legacy_keys(yaml_data)
-                config_data.update(yaml_data)
-        elif os.path.exists("figchain.yaml"):
-            with open("figchain.yaml", 'r') as f:
-                yaml_data = yaml.safe_load(f) or {}
-                cls._map_legacy_keys(yaml_data)
-                config_data.update(yaml_data)
+            # Load the provided path. _load_from_file handles strict extension
+            # parsing and fallbacks for extension-less files.
+            config_data.update(_load_from_file(path))
+        else:
+            # look for common filenames
+            if os.path.exists("figchain.yaml"):
+                config_data.update(_load_from_file("figchain.yaml"))
+            elif os.path.exists("figchain.yml"):
+                config_data.update(_load_from_file("figchain.yml"))
+            elif os.path.exists("figchain.json"):
+                config_data.update(_load_from_file("figchain.json"))
 
         # 3. Environment Variables
         env_map = {
@@ -115,7 +150,9 @@ class Config:
             val = os.getenv(env_key)
             if val is not None:
                 if config_key == "namespaces":
-                    config_data[config_key] = set(s.strip() for s in val.split(",") if s.strip())
+                    config_data[config_key] = set(
+                        s.strip() for s in val.split(",") if s.strip()
+                    )
                 elif config_key in ("poll_interval", "max_retries", "retry_delay_ms"):
                     config_data[config_key] = int(val)
                 elif config_key in ("vault_enabled", "vault_path_style_access"):
@@ -138,11 +175,19 @@ class Config:
         if "namespaces" in config_data and isinstance(config_data["namespaces"], list):
             config_data["namespaces"] = set(config_data["namespaces"])
 
-        if "bootstrap_strategy" in config_data and isinstance(config_data["bootstrap_strategy"], str):
+        if "bootstrap_strategy" in config_data and isinstance(
+            config_data["bootstrap_strategy"], str
+        ):
             try:
-                config_data["bootstrap_strategy"] = BootstrapStrategy(config_data["bootstrap_strategy"])
+                config_data["bootstrap_strategy"] = BootstrapStrategy(
+                    config_data["bootstrap_strategy"]
+                )
             except ValueError:
-                print("Invalid bootstrap strategy: %s" % config_data["bootstrap_strategy"], file=sys.stderr)
+                print(
+                    "Invalid bootstrap strategy: %s"
+                    % config_data["bootstrap_strategy"],
+                    file=sys.stderr,
+                )
                 pass
 
         return cls(**config_data)

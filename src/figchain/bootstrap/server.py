@@ -3,6 +3,7 @@ from .strategy import BootstrapStrategy, BootstrapResult
 from ..transport import Transport
 from datetime import datetime
 
+
 class ServerStrategy(BootstrapStrategy):
     def __init__(self, transport: Transport, as_of: Optional[datetime] = None):
         self.transport = transport

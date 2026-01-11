@@ -1,7 +1,7 @@
 # This file is generated. Do not edit.
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Union, Any
+from typing import List, Optional
 from enum import Enum
 import uuid
 from datetime import datetime
@@ -17,17 +17,20 @@ class Operator(str, Enum):
     NOT_IN = "NOT_IN"
     SPLIT = "SPLIT"
 
+
 @dataclass(kw_only=True)
 class Condition:
     variable: str
     operator: Operator
     values: List[str]
 
+
 @dataclass(kw_only=True)
 class Rule:
     description: Optional[str] = None
     conditions: List[Condition]
     targetVersion: uuid.UUID
+
 
 @dataclass(kw_only=True)
 class FigDefinition:
@@ -39,6 +42,7 @@ class FigDefinition:
     createdAt: datetime
     updatedAt: datetime
 
+
 @dataclass(kw_only=True)
 class Fig:
     figId: uuid.UUID
@@ -49,6 +53,7 @@ class Fig:
     encryptionAlgorithm: Optional[str] = None
     keyId: Optional[str] = None
 
+
 @dataclass(kw_only=True)
 class FigFamily:
     definition: FigDefinition
@@ -56,11 +61,13 @@ class FigFamily:
     rules: List[Rule] = field(default_factory=list)
     defaultVersion: Optional[uuid.UUID] = None
 
+
 @dataclass(kw_only=True)
 class InitialFetchRequest:
     namespace: str
     environmentId: uuid.UUID
     asOfTimestamp: Optional[datetime] = None
+
 
 @dataclass(kw_only=True)
 class InitialFetchResponse:
@@ -68,11 +75,13 @@ class InitialFetchResponse:
     cursor: str
     environmentId: uuid.UUID
 
+
 @dataclass(kw_only=True)
 class UpdateFetchRequest:
     namespace: str
     cursor: str
     environmentId: uuid.UUID
+
 
 @dataclass(kw_only=True)
 class UpdateFetchResponse:
