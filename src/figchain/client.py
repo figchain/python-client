@@ -488,29 +488,18 @@ class FigChainClient:
 
     def _fetch_schema_by_uri(self, schema_uri: str) -> str:
         parsed = urllib.parse.urlparse(schema_uri)
-        if parsed.scheme != "fig":
-            if parsed.scheme == "tag":
-                # Format: tag:figchain.io,2025:namespace:schemaName:version
-                parts = parsed.path.split(":")
-                if len(parts) >= 4:
-                    namespace = parts[1]
-                    name = parts[2]
-                    version = int(parts[3])
-                    return self.transport.fetch_schema(namespace, name, version)
-                else:
-                    raise ValueError(f"Invalid path for tag schema URI: {parsed.path}")
-            raise ValueError(f"Invalid or unsupported schema URI scheme: {parsed.scheme}")
+        if parsed.scheme == "tag":
+            # Format: tag:figchain.io,2025:namespace:schemaName:version
+            parts = parsed.path.split(":")
+            if len(parts) >= 4:
+                namespace = parts[1]
+                name = parts[2]
+                version = int(parts[3])
+                return self.transport.fetch_schema(namespace, name, version)
+            else:
+                raise ValueError(f"Invalid path for tag schema URI: {parsed.path}")
 
-        # fig://{namespace}/{name}/{version}
-        parts = parsed.path.strip("/").split("/")
-        if len(parts) < 3:
-            raise ValueError(f"Invalid schema URI path: {parsed.path}")
-
-        namespace = urllib.parse.unquote(parts[0])
-        name = urllib.parse.unquote(parts[1])
-        version = int(parts[2])
-
-        return self.transport.fetch_schema(namespace, name, version)
+        raise ValueError(f"Invalid or unsupported schema URI scheme: {parsed.scheme}")
 
     def close(self):
         logger.info("Shutting down FigChain client")
