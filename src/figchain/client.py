@@ -493,9 +493,11 @@ class FigChainClient:
                     name = parts[2]
                     version = int(parts[3])
                     return self.transport.fetch_schema(namespace, name, version)
-            raise ValueError(f"Invalid schema URI scheme: {parsed.scheme}")
+                else:
+                    raise ValueError(f"Invalid path for tag schema URI: {parsed.path}")
+            raise ValueError(f"Invalid or unsupported schema URI scheme: {parsed.scheme}")
 
-        # fig://schemas/{namespace}/{name}/{version}
+        # fig://{namespace}/{name}/{version}
         parts = parsed.path.strip("/").split("/")
         if len(parts) < 3:
             raise ValueError(f"Invalid schema URI path: {parsed.path}")

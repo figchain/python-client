@@ -71,7 +71,7 @@ class EncryptionService:
                 matching_key = self._fetch_from_s3(namespace)
                 # Ensure ID match if requested
                 if key_id and matching_key.key_id != key_id:
-                    pass
+                    matching_key = None
             except Exception as e:
                 logger.warning(f"Failed to fetch NSK from S3: {e}")
 
