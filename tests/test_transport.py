@@ -28,7 +28,7 @@ def test_fetch_initial_success(transport, mock_session):
     from figchain.serialization import serialize_ocf
 
     resp_obj = InitialFetchResponse(
-        figFamilies=[], cursor="cursor", environmentId=uuid.uuid4()
+        figFamilies=[], cursor="cursor", environmentId=uuid.uuid4(), schemas={}
     )
     mock_resp.content = serialize_ocf(resp_obj, "InitialFetchResponse")
     mock_session.post.return_value = mock_resp
@@ -63,7 +63,7 @@ def test_fetch_updates_success(transport, mock_session):
 
     from figchain.serialization import serialize_ocf
 
-    resp_obj = UpdateFetchResponse(figFamilies=[], cursor="new-cursor")
+    resp_obj = UpdateFetchResponse(figFamilies=[], cursor="new-cursor", schemas={})
     mock_resp.content = serialize_ocf(resp_obj, "UpdateFetchResponse")
     mock_session.post.return_value = mock_resp
 

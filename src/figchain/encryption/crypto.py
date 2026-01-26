@@ -1,54 +1,64 @@
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.x25519 import (
+    X25519PrivateKey,
+    X25519PublicKey,
+)
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+import binascii
 
-from ..util import load_rsa_private_key
+
+def load_ed25519_private_key(hex_key: str) -> Ed25519PrivateKey:
+    return Ed25519PrivateKey.from_private_bytes(binascii.unhexlify(hex_key))
 
 
-def load_private_key(path: str) -> rsa.RSAPrivateKey:
-    return load_rsa_private_key(path)
+def load_x25519_private_key(hex_key: str) -> X25519PrivateKey:
+    return X25519PrivateKey.from_private_bytes(binascii.unhexlify(hex_key))
 
 
-def unwrap_aes_key(wrapped_key: bytes, kek: bytes) -> bytes:
+def decrypt_x25519(packed_blob: bytes, private_key: X25519PrivateKey) -> bytes:
     """
-    Unwraps an AES key using RFC 3394 AES Key Wrap.
+    Decrypts X25519 envelope.
+    Format: EphemeralPubKey (32) || IV (12) || Ciphertext
     """
-    return aes_key_unwrap(kek, wrapped_key)
+    if len(packed_blob) < 32 + 12:
+        raise ValueError("Blob too short")
 
+    ephemeral_pub_bytes = packed_blob[:32]
+    iv = packed_blob[32:44]
+    ciphertext = packed_blob[44:]
 
-def decrypt_rsa_oaep(encrypted_bytes: bytes, private_key: rsa.RSAPrivateKey) -> bytes:
-    """
-    Decrypts data using RSA-OAEP with SHA-256 and MGF1(SHA-256).
-    """
-    return private_key.decrypt(
-        encrypted_bytes,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None,
-        ),
+    ephemeral_pub_key = X25519PublicKey.from_public_bytes(ephemeral_pub_bytes)
+    shared_secret = private_key.exchange(ephemeral_pub_key)
+
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b"",
+        info=b"",
     )
+    kek = hkdf.derive(shared_secret)
+
+    # Decrypt AES-GCM
+    aesgcm = AESGCM(kek)
+    return aesgcm.decrypt(iv, ciphertext, None)
+
+
+def sign_ed25519(message: bytes, private_key: Ed25519PrivateKey) -> bytes:
+    return private_key.sign(message)
 
 
 def decrypt_aes_gcm(encrypted_bytes: bytes, key: bytes) -> bytes:
     """
     Decrypts data using AES-GCM.
-    Expected format: IV (12 bytes) + Ciphertext + Tag (16 bytes, appended by GCM)
-    python cryptography GCM expects tag to be appended to ciphertext, which matches Java GCM default.
+    Expected format: IV (12 bytes) + Ciphertext + Tag (16 bytes)
     """
-    if len(encrypted_bytes) < 28:  # 12 IV + 16 Tag
+    if len(encrypted_bytes) < 28:
         raise ValueError("Encrypted data too short")
 
     iv = encrypted_bytes[:12]
     ciphertext = encrypted_bytes[12:]
 
-    tag = ciphertext[-16:]
-    actual_ciphertext = ciphertext[:-16]
-
-    decryptor = Cipher(
-        algorithms.AES(key),
-        modes.GCM(iv, tag),
-    ).decryptor()
-
-    return decryptor.update(actual_ciphertext) + decryptor.finalize()
+    aesgcm = AESGCM(key)
+    return aesgcm.decrypt(iv, ciphertext, None)

@@ -199,6 +199,14 @@
                     "type": "string",
                     "logicalType": "uuid"
                 }
+            },
+            {
+                "name": "schemas",
+                "type": {
+                    "type": "map",
+                    "values": "string"
+                },
+                "default": {}
             }
         ]
     },
@@ -239,6 +247,14 @@
             {
                 "name": "cursor",
                 "type": "string"
+            },
+            {
+                "name": "schemas",
+                "type": {
+                    "type": "map",
+                    "values": "string"
+                },
+                "default": {}
             }
         ]
     }

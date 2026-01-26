@@ -45,8 +45,15 @@ def test_client_e2e():
         definition=fig_def, figs=[fig], rules=[], defaultVersion=fig.version
     )
 
+    # Read schema content
+    with open("tests/user_config.avsc", "r") as f:
+        schema_content = f.read()
+
     init_response = InitialFetchResponse(
-        figFamilies=[family], cursor="cursor-1", environmentId=env_id
+        figFamilies=[family],
+        cursor="cursor-1",
+        environmentId=env_id,
+        schemas={"http://example.com/schema": schema_content},
     )
 
     # Mock Transport
@@ -68,32 +75,27 @@ def test_client_e2e():
         from figchain.models import UpdateFetchResponse
 
         update_resp_obj = UpdateFetchResponse(
-            figFamilies=[family_v2], cursor="cursor-2"
+            figFamilies=[family_v2],
+            cursor="cursor-2",
+            schemas={"http://example.com/schema": schema_content},
         )
         mock_update_resp = MagicMock()
         mock_update_resp.status_code = 200
         mock_update_resp.content = serialize_ocf(update_resp_obj, "UpdateFetchResponse")
 
-        # side_effect logic
         allow_update = threading.Event()
 
         def mock_post_side_effect(*args, **kwargs):
             # We can check the mock_session.post call count, but side_effect is stateful.
             pass
 
-        # We need to distinguish initial fetch from update fetch.
-        # Initial fetch happens in __init__ (main thread). Update fetch in thread.
-
         update_iter = iter([mock_update_resp, Exception("Stop Polling")])
 
         def side_effect(*args, **kwargs):
-            # Initial fetch is usually checking url ending in /data/initial
             url = args[0] if len(args) > 0 else kwargs.get("url")
             if "initial" in url:
                 return mock_init_resp
             else:
-                # Update fetch
-                # Block until we allow it
                 allow_update.wait(timeout=5.0)
                 item = next(update_iter)
                 if isinstance(item, Exception):
@@ -107,7 +109,7 @@ def test_client_e2e():
             client_secret="secret",
             environment_id=str(env_id),
             namespaces={namespace},
-            poll_interval=0.1,  # fast poll
+            poll_interval=0.1,
         )
 
         # Test get_fig - should be initial state (red)

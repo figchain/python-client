@@ -1,4 +1,5 @@
 import logging
+import urllib.parse
 import requests
 import uuid
 from datetime import datetime
@@ -93,7 +94,7 @@ class Transport:
                 if encrypted_blob is not None and nsk_version is not None:
                     keys.append(
                         NamespaceKey(
-                            wrapped_key=encrypted_blob, key_id=str(nsk_version)
+                            wrapped_key=encrypted_blob, key_id=f"nsk-v{nsk_version}"
                         )
                     )
         return keys
@@ -108,3 +109,12 @@ class Transport:
         headers = {"Authorization": f"Bearer {self.token_provider.get_token()}"}
         resp = self.session.put(url, json=data, headers=headers, timeout=5)
         resp.raise_for_status()
+
+    def fetch_schema(self, namespace: str, name: str, version: int) -> str:
+        url_ns = urllib.parse.quote(namespace, safe="")
+        url_name = urllib.parse.quote(name, safe="")
+        url = f"{self.base_url}/schemas/{url_ns}/{url_name}/{version}/content"
+        headers = {"Authorization": f"Bearer {self.token_provider.get_token()}"}
+        resp = self.session.get(url, headers=headers, timeout=5)
+        resp.raise_for_status()
+        return resp.text

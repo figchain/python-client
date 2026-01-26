@@ -1,14 +1,14 @@
 from typing import List
 from .strategy import BootstrapStrategy, BootstrapResult
-from ..vault.service import VaultService
+from ..backup.service import S3BackupService
 
 
-class VaultStrategy(BootstrapStrategy):
-    def __init__(self, vault_service: VaultService):
-        self.vault_service = vault_service
+class S3BackupStrategy(BootstrapStrategy):
+    def __init__(self, s3_backup_service: S3BackupService):
+        self.s3_backup_service = s3_backup_service
 
     def bootstrap(self, namespaces: List[str]) -> BootstrapResult:
-        payload = self.vault_service.load_backup()
+        payload = self.s3_backup_service.load_backup()
         if not payload:
             return BootstrapResult([], {})
 

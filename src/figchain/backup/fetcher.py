@@ -4,20 +4,24 @@ import io
 from ..config import Config
 
 
-class S3VaultFetcher:
+class S3BackupFetcher:
     def __init__(self, config: Config):
-        self.bucket = config.vault_bucket
-        self.prefix = config.vault_prefix
+        self.bucket = config.s3_backup_bucket
+        self.prefix = config.s3_backup_prefix
 
         s3_config = BotoConfig(
-            region_name=config.vault_region,
-            s3={"addressing_style": "path"} if config.vault_path_style_access else None,
+            region_name=config.s3_backup_region,
+            s3=(
+                {"addressing_style": "path"}
+                if config.s3_backup_path_style_access
+                else None
+            ),
         )
 
         self.s3_client = boto3.client(
             "s3",
-            region_name=config.vault_region,
-            endpoint_url=config.vault_endpoint,
+            region_name=config.s3_backup_region,
+            endpoint_url=config.s3_backup_endpoint,
             config=s3_config,
         )
 

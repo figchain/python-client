@@ -52,4 +52,4 @@ class PrivateKeyTokenProvider(TokenProvider):
         if self.key_id:
             headers["kid"] = self.key_id
 
-        return jwt.encode(payload, self.private_key, algorithm="RS256", headers=headers)
+        return jwt.encode(payload, self.private_key, algorithm="EdDSA", headers=headers)

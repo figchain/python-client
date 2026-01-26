@@ -1,7 +1,7 @@
 # This file is generated. Do not edit.
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Dict
 from enum import Enum
 import uuid
 from datetime import datetime
@@ -74,6 +74,7 @@ class InitialFetchResponse:
     figFamilies: List[FigFamily]
     cursor: str
     environmentId: uuid.UUID
+    schemas: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(kw_only=True)
@@ -87,3 +88,4 @@ class UpdateFetchRequest:
 class UpdateFetchResponse:
     figFamilies: List[FigFamily]
     cursor: str
+    schemas: Dict[str, str] = field(default_factory=dict)

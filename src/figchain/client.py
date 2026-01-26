@@ -9,17 +9,18 @@ from .models import FigFamily
 from .transport import Transport
 from .store import Store
 from .evaluation import Evaluator, Context
-from .serialization import deserialize
+from .serialization import deserialize, register_schema
 from .bootstrap.server import ServerStrategy
-from .bootstrap.vault import VaultStrategy
+from .bootstrap.backup import S3BackupStrategy
 from .bootstrap.hybrid import HybridStrategy
 from .bootstrap.fallback import FallbackStrategy
-from .vault.service import VaultService
+from .backup.service import S3BackupService
 from .encryption.service import EncryptionService
+from .encryption import crypto
 from .auth import TokenProvider, SharedSecretTokenProvider, PrivateKeyTokenProvider
-from .util import load_rsa_private_key
 
 import json
+import urllib.parse
 
 T = TypeVar("T")
 
@@ -38,34 +39,68 @@ class FigChainClient:
         # Map fields from client-config.json to Config
         cfg = Config()
 
-        # 1. Namespace
+        if "namespaces" in data and isinstance(data["namespaces"], list):
+            cfg.namespaces.update(data["namespaces"])
         if "namespace" in data:
-            cfg.namespaces = {data["namespace"]}
-
-        # 2. Private Key
-        if "privateKey" in data:
-            cfg.auth_private_key_pem = data["privateKey"]
-
-        # 3. Credential ID
+            cfg.namespaces.add(data["namespace"])
+        if "authPrivateKey" in data:
+            cfg.auth_private_key = data["authPrivateKey"]
+        elif "privateKey" in data:
+            cfg.auth_private_key = data["privateKey"]
+        if "encryptionPrivateKey" in data:
+            cfg.encryption_private_key = data["encryptionPrivateKey"]
         if "credentialId" in data:
             cfg.auth_credential_id = data["credentialId"]
+        if "tenantId" in data:
+            cfg.tenant_id = data["tenantId"]
+        if "environmentId" in data:
+            cfg.environment_id = data["environmentId"]
 
-        # 5. Load standard config first to get env vars, then overlay our json values
         base_config = Config.load(**kwargs)
 
         # Update base_config with json values only if not already set (Env/Defaults)
         if not base_config.namespaces and cfg.namespaces:
             base_config.namespaces = cfg.namespaces
 
-        if (
-            not base_config.auth_private_key_pem
-            and not base_config.auth_private_key_path
-            and cfg.auth_private_key_pem
-        ):
-            base_config.auth_private_key_pem = cfg.auth_private_key_pem
+        if not base_config.environment_id and cfg.environment_id:
+            base_config.environment_id = cfg.environment_id
+
+        # Propagate keys
+        if not base_config.auth_private_key and cfg.auth_private_key:
+            base_config.auth_private_key = cfg.auth_private_key
+
+        if not base_config.encryption_private_key and cfg.encryption_private_key:
+            base_config.encryption_private_key = cfg.encryption_private_key
 
         if not base_config.auth_credential_id and cfg.auth_credential_id:
             base_config.auth_credential_id = cfg.auth_credential_id
+
+        if cfg.tenant_id != "default":
+            base_config.tenant_id = cfg.tenant_id
+
+        # S3 Backup Config
+        if "s3_backup_enabled" in data:
+            base_config.s3_backup_enabled = data["s3_backup_enabled"]
+
+        if "s3_backup_bucket" in data:
+            base_config.s3_backup_bucket = data["s3_backup_bucket"]
+
+        if "s3_backup_prefix" in data:
+            base_config.s3_backup_prefix = data["s3_backup_prefix"]
+
+        if "s3_backup_region" in data:
+            base_config.s3_backup_region = data["s3_backup_region"]
+
+        if "s3_backup_endpoint" in data:
+            base_config.s3_backup_endpoint = data["s3_backup_endpoint"]
+
+        if "bootstrapMode" in data:
+            try:
+                base_config.bootstrap_strategy = BootstrapStrategy(
+                    data["bootstrapMode"]
+                )
+            except ValueError:
+                pass
 
         return cls(config=base_config)
 
@@ -80,11 +115,10 @@ class FigChainClient:
         config: Optional[Config] = None,
     ):
 
-        # 1. Load Configuration
+        # Configuration
         if config is None:
             config = Config.load()
 
-        # 2. Override with explicit args
         if base_url:
             config.base_url = base_url
 
@@ -107,34 +141,38 @@ class FigChainClient:
 
         as_of_dt = as_of
         if as_of_dt is None and config.as_of:
-            as_of_dt = datetime.fromisoformat(config.as_of.replace("Z", "+00:00"))
+            try:
+                as_of_dt = datetime.fromisoformat(config.as_of.replace("Z", "+00:00"))
+            except ValueError:
+                pass
         self.as_of = as_of_dt
 
         if not config.environment_id:
             raise ValueError("Environment ID is required")
 
-        if (
-            not config.client_secret
-            and not config.auth_private_key_path
-            and not config.auth_private_key_pem
-        ):
-            raise ValueError(
-                "Client secret or Auth private key (path or PEM) is required"
-            )
-
-        # 3. Initialize Components
+        # Components
         token_provider: TokenProvider
-        if config.auth_private_key_path or config.auth_private_key_pem:
+        auth_key_obj = None
+
+        # Check for Auth Private Key
+        auth_key_hex = config.auth_private_key
+
+        if auth_key_hex:
+            try:
+                auth_key_obj = crypto.load_ed25519_private_key(auth_key_hex)
+            except Exception as e:
+                # If we rely on auth key, this is fatal unless client_secret is present
+                if not config.client_secret:
+                    raise ValueError(f"Failed to load Auth Private Key: {e}")
+
+        if not config.client_secret and not auth_key_obj:
+            raise ValueError("Client secret or Auth private key is required")
+
+        if auth_key_obj:
             if config.namespaces and len(config.namespaces) > 1:
                 raise ValueError(
                     "Private key authentication can only be used with a single namespace"
                 )
-
-            private_key = None
-            if config.auth_private_key_pem:
-                private_key = config.auth_private_key_pem
-            else:
-                private_key = load_rsa_private_key(config.auth_private_key_path)
 
             # Use environment_id as service_account_id for now if not provided
             service_account_id = (
@@ -149,7 +187,7 @@ class FigChainClient:
             key_id = config.auth_credential_id
 
             token_provider = PrivateKeyTokenProvider(
-                private_key,
+                auth_key_obj,
                 service_account_id,
                 tenant_id=tenant_id,
                 namespace=namespace,
@@ -165,37 +203,62 @@ class FigChainClient:
         self.evaluator = Evaluator()
 
         self.namespace_cursors: Dict[str, str] = {}
+        self.schemas: Dict[str, str] = {}
         self._shutdown_event = threading.Event()
         self._poller_thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
         self._listeners: Dict[str, List[tuple[Callable[[Any], None], Type[Any]]]] = {}
         self.encryption_service: Optional[EncryptionService] = None
 
-        if config.encryption_private_key_path:
+        # Prepare S3 Backup Config for Encryption Service
+        s3_backup_config = {
+            "bucket": config.s3_backup_bucket,
+            "prefix": config.s3_backup_prefix,
+            "region": config.s3_backup_region,
+            "endpoint": config.s3_backup_endpoint,
+        }
+        client_id_for_backup = config.auth_credential_id or config.auth_client_id
+
+        # Encryption Key Loading
+        enc_key_obj = None
+        enc_key_hex = config.encryption_private_key
+
+        if enc_key_hex:
+            try:
+                enc_key_obj = crypto.load_x25519_private_key(enc_key_hex)
+            except Exception as e:
+                logger.error(f"Failed to load Encryption Private Key: {e}")
+                raise e
+
+        if enc_key_obj:
             self.encryption_service = EncryptionService(
-                self.transport, config.encryption_private_key_path
+                self.transport,
+                private_key=enc_key_obj,
+                s3_backup_enabled=config.s3_backup_enabled,
+                s3_backup_config=s3_backup_config,
+                client_id=client_id_for_backup,
             )
 
-        # 4. Bootstrap Strategy
+        # Bootstrap Strategy
         server_strategy = ServerStrategy(self.transport, self.as_of)
 
-        if config.vault_enabled:
-            vault_service = VaultService(config)
-            vault_strategy = VaultStrategy(vault_service)
+        if config.s3_backup_enabled:
+            s3_backup_service = S3BackupService(config)
+            s3_backup_strategy = S3BackupStrategy(s3_backup_service)
 
-            if config.bootstrap_strategy == BootstrapStrategy.VAULT:
-                self.bootstrap_strategy = vault_strategy
+            if config.bootstrap_strategy == BootstrapStrategy.S3_BACKUP_ONLY:
+                self.bootstrap_strategy = s3_backup_strategy
             elif config.bootstrap_strategy == BootstrapStrategy.HYBRID:
                 self.bootstrap_strategy = HybridStrategy(
-                    vault_strategy, server_strategy, self.transport
+                    s3_backup_strategy, server_strategy, self.transport
                 )
             elif config.bootstrap_strategy == BootstrapStrategy.SERVER:
-                # Explicitly server only, despite vault enabled generally
+                # Explicitly server only, despite s3 backup enabled generally
                 self.bootstrap_strategy = server_strategy
             else:
                 # SERVER_FIRST or Default
                 self.bootstrap_strategy = FallbackStrategy(
-                    server_strategy, vault_strategy
+                    server_strategy, s3_backup_strategy
                 )
         else:
             self.bootstrap_strategy = server_strategy
@@ -204,16 +267,23 @@ class FigChainClient:
             f"Bootstrapping with strategy: {self.bootstrap_strategy.__class__.__name__}"
         )
 
-        # 5. Execute Bootstrap
+        # Execute Bootstrap
         try:
             result = self.bootstrap_strategy.bootstrap(list(self.namespaces))
             self.store.put_all(result.fig_families)
             self.namespace_cursors = result.cursors
+            if result.schemas:
+                for k, v in result.schemas.items():
+                    self.schemas[k] = v
+                    try:
+                        register_schema(v)
+                    except Exception as e:
+                        logger.warning(f"Failed to register schema {k}: {e}")
         except Exception as e:
             logger.error(f"Bootstrap failed: {e}")
             raise
 
-        # 6. Start Poller
+        # Start Poller
         self._start_poller()
 
     def _start_poller(self):
@@ -238,12 +308,27 @@ class FigChainClient:
                         logger.debug(
                             f"Received {len(resp.figFamilies)} updates for {ns}"
                         )
+                        # Update schemas and cursors first, then notify listeners
+                        with self._lock:
+                            if resp.cursor:
+                                self.namespace_cursors[ns] = resp.cursor
+                            if resp.schemas:
+                                for k, v in resp.schemas.items():
+                                    self.schemas[k] = v
+                                    try:
+                                        register_schema(v)
+                                    except Exception as e:
+                                        logger.warning(
+                                            f"Failed to register schema {k}: {e}"
+                                        )
+
                         self.store.put_all(resp.figFamilies)
                         self._notify_listeners(resp.figFamilies)
 
                     # Update cursor even if no families (heartbeat/timeout)
-                    if resp.cursor:
-                        self.namespace_cursors[ns] = resp.cursor
+                    elif resp.cursor:
+                        with self._lock:
+                            self.namespace_cursors[ns] = resp.cursor
 
                 except Exception as e:
                     logger.warning(f"Poll failed for {ns}: {e}")
@@ -274,7 +359,34 @@ class FigChainClient:
                                     )
 
                                 schema_name = result_type.__name__
-                                val = deserialize(payload, schema_name, result_type)
+                                try:
+                                    val = deserialize(payload, schema_name, result_type)
+                                except ValueError as e:
+                                    if "not found" in str(e).lower():
+                                        # Attempt on-demand fetch
+                                        schema_uri = family.definition.schemaUri
+                                        logger.info(
+                                            f"Schema {schema_name} not found locally, attempting on-demand fetch of {schema_uri}"
+                                        )
+                                        try:
+                                            schema_content = self._fetch_schema_by_uri(
+                                                schema_uri
+                                            )
+                                            with self._lock:
+                                                self.schemas[schema_uri] = (
+                                                    schema_content
+                                                )
+                                                register_schema(schema_content)
+                                            val = deserialize(
+                                                payload, schema_name, result_type
+                                            )
+                                        except Exception as fetch_err:
+                                            logger.error(
+                                                f"Failed to fetch schema {schema_uri} on-demand: {fetch_err}"
+                                            )
+                                            raise e
+                                    else:
+                                        raise e
                                 callback(val)
                             except Exception as e:
                                 logger.error(
@@ -312,9 +424,7 @@ class FigChainClient:
             if len(self.namespaces) == 1:
                 namespace = list(self.namespaces)[0]
             else:
-                # Check if key exists in any namespace
                 found_ns = None
-                # This is inefficient if we have many namespaces, but correctness first
                 for ns in self.namespaces:
                     if self.store.get_fig_family(ns, key):
                         found_ns = ns
@@ -342,14 +452,59 @@ class FigChainClient:
                     )
                 payload = self.encryption_service.decrypt(fig, namespace)
 
-            schema_info = result_type.__name__
+            schema_name = result_type.__name__
             if hasattr(result_type, "schema") and callable(result_type.schema):
-                schema_info = result_type.schema()
+                schema_name = result_type.schema()
 
-            return deserialize(payload, schema_info, result_type)
+            try:
+                return deserialize(payload, schema_name, result_type)
+            except ValueError as e:
+                if "not found" in str(e).lower():
+                    # Attempt on-demand fetch
+                    schema_uri = family.definition.schemaUri
+                    logger.info(
+                        f"Schema {schema_name} not found locally, attempting on-demand fetch of {schema_uri}"
+                    )
+                    try:
+                        schema_content = self._fetch_schema_by_uri(schema_uri)
+                        with self._lock:
+                            self.schemas[schema_uri] = schema_content
+                            register_schema(schema_content)
+                        return deserialize(payload, schema_name, result_type)
+                    except Exception as fetch_err:
+                        logger.error(
+                            f"Failed to fetch schema {schema_uri} on-demand: {fetch_err}"
+                        )
+                        return default_value
+                else:
+                    raise e
         except Exception as e:
             logger.error(f"Failed to deserialize fig {key}: {e}")
             return default_value
+
+    def _fetch_schema_by_uri(self, schema_uri: str) -> str:
+        parsed = urllib.parse.urlparse(schema_uri)
+        if parsed.scheme != "fig":
+            if parsed.scheme == "tag":
+                # Format: tag:figchain.io,2025:namespace:schemaName:version
+                parts = parsed.path.split(":")
+                if len(parts) >= 4:
+                    namespace = parts[1]
+                    name = parts[2]
+                    version = int(parts[3])
+                    return self.transport.fetch_schema(namespace, name, version)
+            raise ValueError(f"Invalid schema URI scheme: {parsed.scheme}")
+
+        # fig://schemas/{namespace}/{name}/{version}
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) < 3:
+            raise ValueError(f"Invalid schema URI path: {parsed.path}")
+
+        namespace = urllib.parse.unquote(parts[0])
+        name = urllib.parse.unquote(parts[1])
+        version = int(parts[2])
+
+        return self.transport.fetch_schema(namespace, name, version)
 
     def close(self):
         logger.info("Shutting down FigChain client")

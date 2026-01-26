@@ -35,7 +35,11 @@ if os.path.exists(_SCHEMA_PATH):
 
 def register_schema(schema_json: Any):
     # This allows adding new schemas (like UserConfig in tests) to the global registry
-    avro.schema.make_avsc_object(schema_json, _NAMES)
+    if isinstance(schema_json, str):
+        schema_data = json.loads(schema_json)
+    else:
+        schema_data = schema_json
+    avro.schema.make_avsc_object(schema_data, _NAMES)
 
 
 def register_schema_from_file(path: str):
@@ -146,10 +150,26 @@ def serialize(obj: Any, schema_name: str) -> bytes:
     return bytes_writer.getvalue()
 
 
-def deserialize(data: bytes, schema_name: str, cls: Type[T]) -> T:
+def deserialize(
+    data: bytes,
+    schema_name: str,
+    cls: Type[T],
+    writer_schema_json: Union[str, None] = None,
+) -> T:
     """Deserializes an object from raw Avro binary."""
-    schema = get_schema(schema_name)
-    reader = avro.io.DatumReader(schema)
+    reader_schema = get_schema(schema_name)
+    writer_schema = None
+    if writer_schema_json:
+        writer_schema = avro.schema.parse(writer_schema_json)
+
+    # If writer_schema is provided, it is the schema valid at the time of writing (from server)
+    # reader_schema is the schema we expect (from local code)
+    # Avro handles resolution from writer -> reader
+    if writer_schema:
+        reader = avro.io.DatumReader(writer_schema, reader_schema)
+    else:
+        reader = avro.io.DatumReader(reader_schema)
+
     bytes_reader = io.BytesIO(data)
     decoder = avro.io.BinaryDecoder(bytes_reader)
     datum = reader.read(decoder)
