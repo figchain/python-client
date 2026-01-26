@@ -10,7 +10,7 @@ from enum import Enum
 class BootstrapStrategy(Enum):
     SERVER = "server"
     SERVER_FIRST = "server-first"
-    VAULT = "vault"
+    S3_BACKUP_ONLY = "s3_backup_only"
     HYBRID = "hybrid"
 
 
@@ -28,31 +28,27 @@ class Config:
     bootstrap_strategy: BootstrapStrategy = BootstrapStrategy.SERVER
     tenant_id: str = "default"
 
-    # Vault Configuration
-    vault_enabled: bool = False
-    vault_bucket: Optional[str] = None
-    vault_prefix: str = ""
-    vault_region: str = "us-east-1"
-    vault_endpoint: Optional[str] = None
-    vault_path_style_access: bool = False
-    vault_private_key_path: Optional[str] = None
+    # S3 Backup Configuration
+    s3_backup_enabled: bool = False
+    s3_backup_bucket: Optional[str] = None
+    s3_backup_prefix: str = ""
+    s3_backup_region: str = "us-east-1"
+    s3_backup_endpoint: Optional[str] = None
+    s3_backup_path_style_access: bool = False
 
     # Encryption
-    encryption_private_key_path: Optional[str] = None
-    auth_private_key_path: Optional[str] = None
-    auth_private_key_pem: Optional[str] = None
+    encryption_private_key: Optional[str] = None
+    auth_private_key: Optional[str] = None
     auth_client_id: Optional[str] = None
     auth_credential_id: Optional[str] = None
 
     @staticmethod
     def _map_legacy_keys(yaml_data: dict) -> None:
-        """
-        Maps camelCase keys from JSON/YAML to snake_case for the internal Config object.
-        Also handles legacy field mapping like 'namespace' to 'namespaces'.
-        """
+        """Maps legacy keys to internal fields."""
         key_map = {
-            "credentialId": "auth_credential_id",
-            "privateKey": "auth_private_key_pem",
+            "privateKey": "auth_private_key",
+            "encryptionPrivateKey": "encryption_private_key",
+            "authPrivateKey": "auth_private_key",
             "tenantId": "tenant_id",
             "environmentId": "environment_id",
         }
@@ -66,20 +62,15 @@ class Config:
                 yaml_data["namespaces"] = [ns]
 
         if "backup" in yaml_data:
-            # Ignore or map backup if needed
             yaml_data.pop("backup")
 
     @classmethod
     def load(cls, path: Optional[str] = None, **kwargs) -> "Config":
-        """
-        Loads configuration from YAML (optional), Environment Variables, and kwargs.
-        Precedence: kwargs > Env Vars > YAML > Defaults
-        """
+        """Loads configuration from file, environment, and kwargs."""
 
-        # 1. Defaults (handled by dataclass)
         config_data = {}
 
-        # 2. Config file (YAML or JSON) - autodetect by extension or try both
+        # Config file
         def _load_from_file(p: str):
             try:
                 with open(p, "r") as f:
@@ -123,39 +114,41 @@ class Config:
             elif os.path.exists("figchain.json"):
                 config_data.update(_load_from_file("figchain.json"))
 
-        # 3. Environment Variables
+        # Environment Variables
         env_map = {
             "FIGCHAIN_URL": "base_url",
             "FIGCHAIN_LONG_POLLING_URL": "long_polling_base_url",
             "FIGCHAIN_CLIENT_SECRET": "client_secret",
             "FIGCHAIN_ENVIRONMENT_ID": "environment_id",
+            "FIGCHAIN_NAMESPACE": "namespaces",  # Special handling in loop below
             "FIGCHAIN_NAMESPACES": "namespaces",
             "FIGCHAIN_POLLING_INTERVAL_MS": "poll_interval",
             "FIGCHAIN_MAX_RETRIES": "max_retries",
             "FIGCHAIN_RETRY_DELAY_MS": "retry_delay_ms",
             "FIGCHAIN_AS_OF_TIMESTAMP": "as_of",
             "FIGCHAIN_BOOTSTRAP_STRATEGY": "bootstrap_strategy",
-            "FIGCHAIN_VAULT_ENABLED": "vault_enabled",
-            "FIGCHAIN_VAULT_BUCKET": "vault_bucket",
-            "FIGCHAIN_VAULT_PREFIX": "vault_prefix",
-            "FIGCHAIN_VAULT_REGION": "vault_region",
-            "FIGCHAIN_VAULT_ENDPOINT": "vault_endpoint",
-            "FIGCHAIN_VAULT_PATH_STYLE_ACCESS": "vault_path_style_access",
-            "FIGCHAIN_VAULT_PRIVATE_KEY_PATH": "vault_private_key_path",
-            "FIGCHAIN_ENCRYPTION_PRIVATE_KEY_PATH": "encryption_private_key_path",
-            "FIGCHAIN_AUTH_PRIVATE_KEY_PATH": "auth_private_key_path",
+            "FIGCHAIN_S3_BACKUP_ENABLED": "s3_backup_enabled",
+            "FIGCHAIN_S3_BACKUP_BUCKET": "s3_backup_bucket",
+            "FIGCHAIN_S3_BACKUP_PREFIX": "s3_backup_prefix",
+            "FIGCHAIN_S3_BACKUP_REGION": "s3_backup_region",
+            "FIGCHAIN_S3_BACKUP_ENDPOINT": "s3_backup_endpoint",
+            "FIGCHAIN_S3_BACKUP_PATH_STYLE_ACCESS": "s3_backup_path_style_access",
+            "FIGCHAIN_ENCRYPTION_PRIVATE_KEY": "encryption_private_key",
+            "FIGCHAIN_IDENTITY_PRIVATE_KEY": "auth_private_key",
         }
 
         for env_key, config_key in env_map.items():
             val = os.getenv(env_key)
             if val is not None:
-                if config_key == "namespaces":
+                if env_key == "FIGCHAIN_NAMESPACE":
+                    config_data["namespaces"] = {val.strip()}
+                elif config_key == "namespaces":
                     config_data[config_key] = set(
                         s.strip() for s in val.split(",") if s.strip()
                     )
                 elif config_key in ("poll_interval", "max_retries", "retry_delay_ms"):
                     config_data[config_key] = int(val)
-                elif config_key in ("vault_enabled", "vault_path_style_access"):
+                elif config_key in ("s3_backup_enabled", "s3_backup_path_style_access"):
                     config_data[config_key] = val.lower() in ("true", "1", "yes")
                 elif config_key == "bootstrap_strategy":
                     try:
@@ -166,7 +159,7 @@ class Config:
                 else:
                     config_data[config_key] = val
 
-        # 4. kwargs (Overrides)
+        # kwargs (Overrides)
         for k, v in kwargs.items():
             if v is not None:
                 config_data[k] = v

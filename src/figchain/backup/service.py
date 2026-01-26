@@ -12,12 +12,12 @@ from .crypto import (
     decrypt_aes_key,
     decrypt_data,
 )
-from .fetcher import S3VaultFetcher
+from .fetcher import S3BackupFetcher
 
 logger = logging.getLogger(__name__)
 
 
-class VaultPayload:
+class BackupPayload:
     def __init__(
         self, tenant_id: str, generated_at: str, sync_token: str, items_data: List[dict]
     ):
@@ -33,7 +33,7 @@ class VaultPayload:
             try:
                 families.append(self._dict_to_fig_family(d))
             except Exception as e:
-                logger.error(f"Failed to parse FigFamily from vault backup: {e}")
+                logger.error(f"Failed to parse FigFamily from backup: {e}")
         return families
 
     def _dict_to_fig_family(self, d: dict) -> FigFamily:
@@ -101,20 +101,23 @@ class VaultPayload:
         return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
 
 
-class VaultService:
+class S3BackupService:
     def __init__(self, config: Config):
         self.config = config
 
-    def load_backup(self) -> Optional[VaultPayload]:
-        if not self.config.vault_enabled:
+    def load_backup(self) -> Optional[BackupPayload]:
+        if not self.config.s3_backup_enabled:
             return None
 
-        if not self.config.vault_private_key_path:
-            raise ValueError("Vault private key path not configured")
+        s3_backup_key_hex = (
+            self.config.auth_private_key or self.config.encryption_private_key
+        )
+        if not s3_backup_key_hex:
+            raise ValueError("Backup private key (hex) not configured")
 
         # 1. Load Private Key
-        logger.debug(f"Loading private key from {self.config.vault_private_key_path}")
-        private_key = load_private_key(self.config.vault_private_key_path)
+        logger.debug("Loading private key from config (hex)")
+        private_key = load_private_key(s3_backup_key_hex)
 
         # 2. Calculate Fingerprint
         fingerprint = calculate_fingerprint(private_key)
@@ -122,7 +125,7 @@ class VaultService:
 
         # 3. Fetch Encrypted Backup
         logger.debug("Fetching backup from S3...")
-        fetcher = S3VaultFetcher(self.config)
+        fetcher = S3BackupFetcher(self.config)
         try:
             backup_io = fetcher.fetch_backup(fingerprint)
             backup_data = json.load(backup_io)
@@ -149,10 +152,10 @@ class VaultService:
         payload_dict = json.loads(json_payload)
 
         logger.info(
-            f"Successfully loaded backup from vault. Tenant: {payload_dict.get('tenantId')}"
+            f"Successfully loaded backup from s3 backup. Tenant: {payload_dict.get('tenantId')}"
         )
 
-        return VaultPayload(
+        return BackupPayload(
             tenant_id=payload_dict.get("tenantId"),
             generated_at=payload_dict.get("generatedAt"),
             sync_token=payload_dict.get("syncToken"),

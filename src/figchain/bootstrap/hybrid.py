@@ -9,29 +9,31 @@ logger = logging.getLogger(__name__)
 class HybridStrategy(BootstrapStrategy):
     def __init__(
         self,
-        vault_strategy: BootstrapStrategy,
+        s3_backup_strategy: BootstrapStrategy,
         server_strategy: BootstrapStrategy,
         transport: Transport,
     ):
-        self.vault_strategy = vault_strategy
+        self.s3_backup_strategy = s3_backup_strategy
         self.server_strategy = server_strategy
         self.transport = transport
 
     def bootstrap(self, namespaces: List[str]) -> BootstrapResult:
-        # 1. Load from Vault
+        # 1. Load from S3 Backup
         try:
-            vault_result = self.vault_strategy.bootstrap(namespaces)
+            s3_backup_result = self.s3_backup_strategy.bootstrap(namespaces)
         except Exception as e:
             logger.warning(
-                f"Vault bootstrap failed: {e}. Falling back to empty result."
+                f"S3 Backup bootstrap failed: {e}. Falling back to empty result."
             )
-            vault_result = BootstrapResult([], {})
+            s3_backup_result = BootstrapResult([], {})
 
         # 2. Identify missing namespaces
-        missing_namespaces = [ns for ns in namespaces if ns not in vault_result.cursors]
+        missing_namespaces = [
+            ns for ns in namespaces if ns not in s3_backup_result.cursors
+        ]
 
-        all_families = list(vault_result.fig_families)
-        final_cursors = dict(vault_result.cursors)
+        all_families = list(s3_backup_result.fig_families)
+        final_cursors = dict(s3_backup_result.cursors)
 
         # 3. Fetch missing from Server
         if missing_namespaces:
@@ -48,7 +50,7 @@ class HybridStrategy(BootstrapStrategy):
         # 4. Catch up
         for ns in namespaces:
             cursor = final_cursors.get(ns)
-            # Only catch up if it was in Vault (so it might be stale)
+            # Only catch up if it was in S3 Backup (so it might be stale)
             # And NOT if it was just fetched from server (assumed fresh)
             if ns not in missing_namespaces and cursor:
                 try:

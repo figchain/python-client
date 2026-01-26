@@ -12,10 +12,13 @@ class ServerStrategy(BootstrapStrategy):
     def bootstrap(self, namespaces: List[str]) -> BootstrapResult:
         families = []
         cursors = {}
+        schemas = {}
         for ns in namespaces:
             resp = self.transport.fetch_initial(ns, self.as_of)
             if resp.figFamilies:
                 families.extend(resp.figFamilies)
             if resp.cursor:
                 cursors[ns] = resp.cursor
-        return BootstrapResult(families, cursors)
+            if resp.schemas:
+                schemas.update(resp.schemas)
+        return BootstrapResult(families, cursors, schemas)
