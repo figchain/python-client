@@ -10,6 +10,7 @@ import avro.schema
 import avro.io
 import avro.datafile
 from . import models
+from .exceptions import SchemaNotFoundError
 
 T = TypeVar("T")
 
@@ -64,7 +65,7 @@ def get_schema(name: str) -> avro.schema.Schema:
                 return v
 
     if not schema:
-        raise ValueError(f"Schema {name} not found")
+        raise SchemaNotFoundError(name)
 
     return schema
 

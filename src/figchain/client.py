@@ -10,6 +10,7 @@ from .transport import Transport
 from .store import Store
 from .evaluation import Evaluator, Context
 from .serialization import deserialize, register_schema
+from .exceptions import SchemaNotFoundError
 from .bootstrap.server import ServerStrategy
 from .bootstrap.backup import S3BackupStrategy
 from .bootstrap.hybrid import HybridStrategy
@@ -370,31 +371,28 @@ class FigChainClient:
                                 schema_name = result_type.__name__
                                 try:
                                     val = deserialize(payload, schema_name, result_type)
-                                except ValueError as e:
-                                    if "not found" in str(e).lower():
-                                        # Attempt on-demand fetch
-                                        schema_uri = family.definition.schemaUri
-                                        logger.info(
-                                            f"Schema {schema_name} not found locally, attempting on-demand fetch of {schema_uri}"
+                                except SchemaNotFoundError as e:
+                                    # Attempt on-demand fetch
+                                    schema_uri = family.definition.schemaUri
+                                    logger.info(
+                                        f"Schema {schema_name} not found locally, attempting on-demand fetch of {schema_uri}"
+                                    )
+                                    try:
+                                        schema_content = self._fetch_schema_by_uri(
+                                            schema_uri
                                         )
-                                        try:
-                                            schema_content = self._fetch_schema_by_uri(
-                                                schema_uri
+                                        with self._lock:
+                                            self.schemas[schema_uri] = (
+                                                schema_content
                                             )
-                                            with self._lock:
-                                                self.schemas[schema_uri] = (
-                                                    schema_content
-                                                )
-                                                register_schema(schema_content)
-                                            val = deserialize(
-                                                payload, schema_name, result_type
-                                            )
-                                        except Exception as fetch_err:
-                                            logger.error(
-                                                f"Failed to fetch schema {schema_uri} on-demand: {fetch_err}"
-                                            )
-                                            raise e
-                                    else:
+                                            register_schema(schema_content)
+                                        val = deserialize(
+                                            payload, schema_name, result_type
+                                        )
+                                    except Exception as fetch_err:
+                                        logger.error(
+                                            f"Failed to fetch schema {schema_uri} on-demand: {fetch_err}"
+                                        )
                                         raise e
                                 callback(val)
                             except Exception as e:
@@ -467,26 +465,23 @@ class FigChainClient:
 
             try:
                 return deserialize(payload, schema_name, result_type)
-            except ValueError as e:
-                if "not found" in str(e).lower():
-                    # Attempt on-demand fetch
-                    schema_uri = family.definition.schemaUri
-                    logger.info(
-                        f"Schema {schema_name} not found locally, attempting on-demand fetch of {schema_uri}"
+            except SchemaNotFoundError as e:
+                # Attempt on-demand fetch
+                schema_uri = family.definition.schemaUri
+                logger.info(
+                    f"Schema {schema_name} not found locally, attempting on-demand fetch of {schema_uri}"
+                )
+                try:
+                    schema_content = self._fetch_schema_by_uri(schema_uri)
+                    with self._lock:
+                        self.schemas[schema_uri] = schema_content
+                        register_schema(schema_content)
+                    return deserialize(payload, schema_name, result_type)
+                except Exception as fetch_err:
+                    logger.error(
+                        f"Failed to fetch schema {schema_uri} on-demand: {fetch_err}"
                     )
-                    try:
-                        schema_content = self._fetch_schema_by_uri(schema_uri)
-                        with self._lock:
-                            self.schemas[schema_uri] = schema_content
-                            register_schema(schema_content)
-                        return deserialize(payload, schema_name, result_type)
-                    except Exception as fetch_err:
-                        logger.error(
-                            f"Failed to fetch schema {schema_uri} on-demand: {fetch_err}"
-                        )
-                        return default_value
-                else:
-                    raise e
+                    return default_value
         except Exception as e:
             logger.error(f"Failed to deserialize fig {key}: {e}")
             return default_value
