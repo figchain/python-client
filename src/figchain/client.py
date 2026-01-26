@@ -39,61 +39,69 @@ class FigChainClient:
         # Map fields from client-config.json to Config
         cfg = Config()
 
+        # Define mapping of config attributes to their possible JSON key variants
+        # Format: config_attr: [json_key_variants...]
+        config_mappings = {
+            "auth_private_key": ["authPrivateKey", "privateKey"],
+            "encryption_private_key": ["encryptionPrivateKey"],
+            "auth_credential_id": ["credentialId"],
+            "tenant_id": ["tenantId"],
+            "environment_id": ["environmentId"],
+        }
+
+        # Load config values from JSON using first matching key variant
+        for attr, key_variants in config_mappings.items():
+            for key in key_variants:
+                if key in data:
+                    setattr(cfg, attr, data[key])
+                    break
+
+        # Handle namespaces (special case - can be list or single value)
         if "namespaces" in data and isinstance(data["namespaces"], list):
             cfg.namespaces.update(data["namespaces"])
         if "namespace" in data:
             cfg.namespaces.add(data["namespace"])
-        if "authPrivateKey" in data:
-            cfg.auth_private_key = data["authPrivateKey"]
-        elif "privateKey" in data:
-            cfg.auth_private_key = data["privateKey"]
-        if "encryptionPrivateKey" in data:
-            cfg.encryption_private_key = data["encryptionPrivateKey"]
-        if "credentialId" in data:
-            cfg.auth_credential_id = data["credentialId"]
-        if "tenantId" in data:
-            cfg.tenant_id = data["tenantId"]
-        if "environmentId" in data:
-            cfg.environment_id = data["environmentId"]
 
+        # Load base config from environment/defaults
         base_config = Config.load(**kwargs)
 
-        # Update base_config with json values only if not already set (Env/Defaults)
-        if not base_config.namespaces and cfg.namespaces:
-            base_config.namespaces = cfg.namespaces
+        # Merge cfg into base_config (only if not already set)
+        merge_mappings = {
+            "namespaces": "namespaces",
+            "environment_id": "environment_id",
+            "auth_private_key": "auth_private_key",
+            "encryption_private_key": "encryption_private_key",
+            "auth_credential_id": "auth_credential_id",
+        }
 
-        if not base_config.environment_id and cfg.environment_id:
-            base_config.environment_id = cfg.environment_id
+        for base_attr, cfg_attr in merge_mappings.items():
+            base_value = getattr(base_config, base_attr)
+            cfg_value = getattr(cfg, cfg_attr)
 
-        # Propagate keys
-        if not base_config.auth_private_key and cfg.auth_private_key:
-            base_config.auth_private_key = cfg.auth_private_key
+            # Only merge if base is empty/falsy and cfg has a value
+            if not base_value and cfg_value:
+                setattr(base_config, base_attr, cfg_value)
 
-        if not base_config.encryption_private_key and cfg.encryption_private_key:
-            base_config.encryption_private_key = cfg.encryption_private_key
-
-        if not base_config.auth_credential_id and cfg.auth_credential_id:
-            base_config.auth_credential_id = cfg.auth_credential_id
-
+        # Tenant ID special case (override if not default)
         if cfg.tenant_id != "default":
             base_config.tenant_id = cfg.tenant_id
 
-        # S3 Backup Config
-        if "s3_backup_enabled" in data:
-            base_config.s3_backup_enabled = data["s3_backup_enabled"]
+        # S3 Backup Config - load from camelCase or snake_case variants
+        s3_config_mappings = {
+            "s3_backup_enabled": ["s3BackupEnabled", "s3_backup_enabled"],
+            "s3_backup_bucket": ["s3BackupBucket", "s3_backup_bucket"],
+            "s3_backup_prefix": ["s3BackupPrefix", "s3_backup_prefix"],
+            "s3_backup_region": ["s3BackupRegion", "s3_backup_region"],
+            "s3_backup_endpoint": ["s3BackupEndpoint", "s3_backup_endpoint"],
+        }
 
-        if "s3_backup_bucket" in data:
-            base_config.s3_backup_bucket = data["s3_backup_bucket"]
+        for attr_name, key_variants in s3_config_mappings.items():
+            for key in key_variants:
+                if key in data:
+                    setattr(base_config, attr_name, data[key])
+                    break
 
-        if "s3_backup_prefix" in data:
-            base_config.s3_backup_prefix = data["s3_backup_prefix"]
-
-        if "s3_backup_region" in data:
-            base_config.s3_backup_region = data["s3_backup_region"]
-
-        if "s3_backup_endpoint" in data:
-            base_config.s3_backup_endpoint = data["s3_backup_endpoint"]
-
+        # Bootstrap mode (special case with enum conversion)
         if "bootstrapMode" in data:
             try:
                 base_config.bootstrap_strategy = BootstrapStrategy(
@@ -103,6 +111,7 @@ class FigChainClient:
                 pass
 
         return cls(config=base_config)
+
 
     def __init__(
         self,
