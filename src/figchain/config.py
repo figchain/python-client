@@ -10,7 +10,7 @@ from enum import Enum
 class BootstrapStrategy(Enum):
     SERVER = "server"
     SERVER_FIRST = "server-first"
-    S3_BACKUP_ONLY = "s3_backup_only"
+    S3_BACKUP_ONLY = "s3-backup-only"
     HYBRID = "hybrid"
 
 
@@ -25,7 +25,7 @@ class Config:
     poll_interval: int = 60
     max_retries: int = 3
     retry_delay_ms: int = 1000
-    bootstrap_strategy: BootstrapStrategy = BootstrapStrategy.SERVER
+    bootstrap_strategy: BootstrapStrategy = BootstrapStrategy.SERVER_FIRST
     tenant_id: str = "default"
 
     # S3 Backup Configuration
@@ -137,6 +137,10 @@ class Config:
             "FIGCHAIN_IDENTITY_PRIVATE_KEY": "auth_private_key",
         }
 
+        def normalize_strategy(val: str) -> str:
+            # Normalize to kebab-case (e.g., S3_BACKUP_ONLY -> s3-backup-only)
+            return val.lower().replace("_", "-")
+
         for env_key, config_key in env_map.items():
             val = os.getenv(env_key)
             if val is not None:
@@ -152,7 +156,7 @@ class Config:
                     config_data[config_key] = val.lower() in ("true", "1", "yes")
                 elif config_key == "bootstrap_strategy":
                     try:
-                        config_data[config_key] = BootstrapStrategy(val.lower())
+                        config_data[config_key] = BootstrapStrategy(normalize_strategy(val))
                     except ValueError:
                         print("Invalid bootstrap strategy: %s" % val, file=sys.stderr)
                         pass
@@ -173,7 +177,7 @@ class Config:
         ):
             try:
                 config_data["bootstrap_strategy"] = BootstrapStrategy(
-                    config_data["bootstrap_strategy"]
+                    normalize_strategy(config_data["bootstrap_strategy"])
                 )
             except ValueError:
                 print(
