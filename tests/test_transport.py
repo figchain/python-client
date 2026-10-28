@@ -1,9 +1,11 @@
-import pytest
 import uuid
 from unittest.mock import MagicMock, patch
-from figchain.transport import Transport
-from figchain.models import InitialFetchResponse, UpdateFetchResponse
+
+import pytest
+
 from figchain.auth import SharedSecretTokenProvider
+from figchain.models import InitialFetchResponse, UpdateFetchResponse
+from figchain.transport import Transport
 
 
 @pytest.fixture

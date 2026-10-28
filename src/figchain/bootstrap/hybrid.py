@@ -1,7 +1,7 @@
-from typing import List
 import logging
-from .strategy import BootstrapStrategy, BootstrapResult
+
 from ..transport import Transport
+from .strategy import BootstrapResult, BootstrapStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ class HybridStrategy(BootstrapStrategy):
         self.server_strategy = server_strategy
         self.transport = transport
 
-    def bootstrap(self, namespaces: List[str]) -> BootstrapResult:
+    def bootstrap(self, namespaces: list[str]) -> BootstrapResult:
         # 1. Load from S3 Backup
         try:
             s3_backup_result = self.s3_backup_strategy.bootstrap(namespaces)

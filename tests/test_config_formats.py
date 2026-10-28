@@ -1,7 +1,8 @@
-import json
-import yaml
 import importlib.util
+import json
 from pathlib import Path
+
+import yaml
 
 # Load Config module directly to avoid importing the whole package (tests run without deps)
 spec = importlib.util.spec_from_file_location(
@@ -80,4 +81,7 @@ def test_bootstrap_strategy_default_and_normalization(tmp_path, monkeypatch):
     monkeypatch.delenv("FIGCHAIN_BOOTSTRAP_STRATEGY")
     cfg_file = tmp_path / "cfg.json"
     cfg_file.write_text(json.dumps({"bootstrap_strategy": "s3_backup_only"}))
-    assert Config.load(path=str(cfg_file)).bootstrap_strategy == BootstrapStrategy.S3_BACKUP_ONLY
+    assert (
+        Config.load(path=str(cfg_file)).bootstrap_strategy
+        == BootstrapStrategy.S3_BACKUP_ONLY
+    )

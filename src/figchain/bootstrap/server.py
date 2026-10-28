@@ -1,15 +1,15 @@
-from typing import List, Optional
-from .strategy import BootstrapStrategy, BootstrapResult
-from ..transport import Transport
 from datetime import datetime
+
+from ..transport import Transport
+from .strategy import BootstrapResult, BootstrapStrategy
 
 
 class ServerStrategy(BootstrapStrategy):
-    def __init__(self, transport: Transport, as_of: Optional[datetime] = None):
+    def __init__(self, transport: Transport, as_of: datetime | None = None):
         self.transport = transport
         self.as_of = as_of
 
-    def bootstrap(self, namespaces: List[str]) -> BootstrapResult:
+    def bootstrap(self, namespaces: list[str]) -> BootstrapResult:
         families = []
         cursors = {}
         schemas = {}

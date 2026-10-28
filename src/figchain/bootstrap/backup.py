@@ -1,13 +1,13 @@
-from typing import List
-from .strategy import BootstrapStrategy, BootstrapResult
+
 from ..backup.service import S3BackupService
+from .strategy import BootstrapResult, BootstrapStrategy
 
 
 class S3BackupStrategy(BootstrapStrategy):
     def __init__(self, s3_backup_service: S3BackupService):
         self.s3_backup_service = s3_backup_service
 
-    def bootstrap(self, namespaces: List[str]) -> BootstrapResult:
+    def bootstrap(self, namespaces: list[str]) -> BootstrapResult:
         payload = self.s3_backup_service.load_backup()
         if not payload:
             return BootstrapResult([], {})

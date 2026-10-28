@@ -1,9 +1,11 @@
-import binascii
 import base64
+import binascii
 import logging
+
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+
 from ..encryption import crypto
 
 logger = logging.getLogger(__name__)

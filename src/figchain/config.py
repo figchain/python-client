@@ -1,10 +1,10 @@
+import json
 import os
 import sys
-import json
-import yaml
 from dataclasses import dataclass, field
-from typing import Set, Optional
 from enum import Enum
+
+import yaml
 
 
 class BootstrapStrategy(Enum):
@@ -17,11 +17,11 @@ class BootstrapStrategy(Enum):
 @dataclass
 class Config:
     base_url: str = "https://app.figchain.io/api/"
-    long_polling_base_url: Optional[str] = None
-    client_secret: Optional[str] = None
-    environment_id: Optional[str] = None
-    namespaces: Set[str] = field(default_factory=set)
-    as_of: Optional[str] = None
+    long_polling_base_url: str | None = None
+    client_secret: str | None = None
+    environment_id: str | None = None
+    namespaces: set[str] = field(default_factory=set)
+    as_of: str | None = None
     poll_interval: int = 60
     max_retries: int = 3
     retry_delay_ms: int = 1000
@@ -30,17 +30,17 @@ class Config:
 
     # S3 Backup Configuration
     s3_backup_enabled: bool = False
-    s3_backup_bucket: Optional[str] = None
+    s3_backup_bucket: str | None = None
     s3_backup_prefix: str = ""
     s3_backup_region: str = "us-east-1"
-    s3_backup_endpoint: Optional[str] = None
+    s3_backup_endpoint: str | None = None
     s3_backup_path_style_access: bool = False
 
     # Encryption
-    encryption_private_key: Optional[str] = None
-    auth_private_key: Optional[str] = None
-    auth_client_id: Optional[str] = None
-    auth_credential_id: Optional[str] = None
+    encryption_private_key: str | None = None
+    auth_private_key: str | None = None
+    auth_client_id: str | None = None
+    auth_credential_id: str | None = None
 
     @staticmethod
     def _map_legacy_keys(yaml_data: dict) -> None:
@@ -65,7 +65,7 @@ class Config:
             yaml_data.pop("backup")
 
     @classmethod
-    def load(cls, path: Optional[str] = None, **kwargs) -> "Config":
+    def load(cls, path: str | None = None, **kwargs) -> "Config":
         """Loads configuration from file, environment, and kwargs."""
 
         config_data = {}
@@ -73,7 +73,7 @@ class Config:
         # Config file
         def _load_from_file(p: str):
             try:
-                with open(p, "r") as f:
+                with open(p) as f:
                     content = f.read()
             except FileNotFoundError:
                 raise
@@ -147,19 +147,20 @@ class Config:
                 if env_key == "FIGCHAIN_NAMESPACE":
                     config_data["namespaces"] = {val.strip()}
                 elif config_key == "namespaces":
-                    config_data[config_key] = set(
+                    config_data[config_key] = {
                         s.strip() for s in val.split(",") if s.strip()
-                    )
+                    }
                 elif config_key in ("poll_interval", "max_retries", "retry_delay_ms"):
                     config_data[config_key] = int(val)
                 elif config_key in ("s3_backup_enabled", "s3_backup_path_style_access"):
                     config_data[config_key] = val.lower() in ("true", "1", "yes")
                 elif config_key == "bootstrap_strategy":
                     try:
-                        config_data[config_key] = BootstrapStrategy(normalize_strategy(val))
+                        config_data[config_key] = BootstrapStrategy(
+                            normalize_strategy(val)
+                        )
                     except ValueError:
-                        print("Invalid bootstrap strategy: %s" % val, file=sys.stderr)
-                        pass
+                        print(f"Invalid bootstrap strategy: {val}", file=sys.stderr)
                 else:
                     config_data[config_key] = val
 
@@ -181,10 +182,10 @@ class Config:
                 )
             except ValueError:
                 print(
-                    "Invalid bootstrap strategy: %s"
-                    % config_data["bootstrap_strategy"],
+                    "Invalid bootstrap strategy: {}".format(
+                        config_data["bootstrap_strategy"]
+                    ),
                     file=sys.stderr,
                 )
-                pass
 
         return cls(**config_data)

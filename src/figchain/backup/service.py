@@ -1,16 +1,16 @@
+import base64
 import json
 import logging
 import uuid
-import base64
 from datetime import datetime
-from typing import List, Optional
+
 from ..config import Config
-from ..models import FigFamily, FigDefinition, Fig, Rule, Condition, Operator
+from ..models import Condition, Fig, FigDefinition, FigFamily, Operator, Rule
 from .crypto import (
-    load_private_key,
     calculate_fingerprint,
     decrypt_aes_key,
     decrypt_data,
+    load_private_key,
 )
 from .fetcher import S3BackupFetcher
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class BackupPayload:
     def __init__(
-        self, tenant_id: str, generated_at: str, sync_token: str, items_data: List[dict]
+        self, tenant_id: str, generated_at: str, sync_token: str, items_data: list[dict]
     ):
         self.tenant_id = tenant_id
         self.generated_at = generated_at
@@ -27,7 +27,7 @@ class BackupPayload:
         self.items_data = items_data
 
     @property
-    def items(self) -> List[FigFamily]:
+    def items(self) -> list[FigFamily]:
         families = []
         for d in self.items_data:
             try:
@@ -105,7 +105,7 @@ class S3BackupService:
     def __init__(self, config: Config):
         self.config = config
 
-    def load_backup(self) -> Optional[BackupPayload]:
+    def load_backup(self) -> BackupPayload | None:
         if not self.config.s3_backup_enabled:
             return None
 

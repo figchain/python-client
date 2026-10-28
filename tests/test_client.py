@@ -1,13 +1,14 @@
 import threading
 import uuid
-from datetime import datetime
-import pytest
 from dataclasses import dataclass
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from figchain import FigChainClient
-from figchain.models import InitialFetchResponse, FigFamily, FigDefinition, Fig
-from figchain.serialization import serialize, serialize_ocf, register_schema_from_file
+from figchain.models import Fig, FigDefinition, FigFamily, InitialFetchResponse
+from figchain.serialization import register_schema_from_file, serialize, serialize_ocf
 
 
 @dataclass
@@ -46,7 +47,7 @@ def test_client_e2e():
     )
 
     # Read schema content
-    with open("tests/user_config.avsc", "r") as f:
+    with open("tests/user_config.avsc") as f:
         schema_content = f.read()
 
     init_response = InitialFetchResponse(

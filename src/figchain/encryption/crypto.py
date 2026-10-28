@@ -1,12 +1,13 @@
+import binascii
+
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey,
     X25519PublicKey,
 )
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-import binascii
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 
 def load_ed25519_private_key(hex_key: str) -> Ed25519PrivateKey:

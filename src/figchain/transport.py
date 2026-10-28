@@ -1,10 +1,11 @@
 import logging
 import urllib.parse
-import requests
 import uuid
 from datetime import datetime
-from typing import Optional, List
-from .serialization import serialize_ocf, deserialize_ocf
+
+import requests
+
+from .auth import TokenProvider
 from .models import (
     InitialFetchRequest,
     InitialFetchResponse,
@@ -12,7 +13,7 @@ from .models import (
     UpdateFetchResponse,
 )
 from .models_dto import NamespaceKey, UserPublicKey
-from .auth import TokenProvider
+from .serialization import deserialize_ocf, serialize_ocf
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class Transport:
         self.session.headers.update({"Content-Type": "application/octet-stream"})
 
     def fetch_initial(
-        self, namespace: str, as_of: Optional[datetime] = None
+        self, namespace: str, as_of: datetime | None = None
     ) -> InitialFetchResponse:
         logger.debug(f"Fetching initial data for namespace {namespace}")
         req = InitialFetchRequest(
@@ -77,7 +78,7 @@ class Transport:
 
         return deserialize_ocf(resp.content, "UpdateFetchResponse", UpdateFetchResponse)
 
-    def get_namespace_key(self, namespace: str) -> List[NamespaceKey]:
+    def get_namespace_key(self, namespace: str) -> list[NamespaceKey]:
         url = f"{self.base_url}/envelopes"
         params = {"namespace": namespace}
         headers = {"Authorization": f"Bearer {self.token_provider.get_token()}"}
