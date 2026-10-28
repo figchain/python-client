@@ -1,4 +1,3 @@
-
 from ..backup.service import S3BackupService
 from .strategy import BootstrapResult, BootstrapStrategy
 

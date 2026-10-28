@@ -7,6 +7,8 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any, TypeVar
 
+import requests
+
 from .auth import PrivateKeyTokenProvider, SharedSecretTokenProvider, TokenProvider
 from .backup.service import S3BackupService
 from .bootstrap.backup import S3BackupStrategy
@@ -26,6 +28,13 @@ from .transport import Transport
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
+
+# How long the server may hold an update request open. Kept under common
+# proxy/load-balancer idle timeouts (often 60s).
+LONG_POLL_WAIT_SECONDS = 30
+# Consecutive in-transit failures (timeouts, dropped connections) in long-poll
+# mode before a namespace falls back to plain polling.
+LONG_POLL_FALLBACK_AFTER = 3
 
 
 class FigChainClient:
@@ -214,7 +223,7 @@ class FigChainClient:
         self.namespace_cursors: dict[str, str] = {}
         self.schemas: dict[str, str] = {}
         self._shutdown_event = threading.Event()
-        self._poller_thread: threading.Thread | None = None
+        self._poller_threads: list[threading.Thread] = []
         self._lock = threading.RLock()
         self._listeners: dict[str, list[tuple[Callable[[Any], None], type[Any]]]] = {}
         self.encryption_service: EncryptionService | None = None
@@ -296,53 +305,83 @@ class FigChainClient:
         self._start_poller()
 
     def _start_poller(self):
-        self._poller_thread = threading.Thread(
-            target=self._poll_loop, daemon=True, name="FigChainPoller"
-        )
-        self._poller_thread.start()
+        # One poller per namespace so a long poll on a quiet namespace never
+        # delays updates for another.
+        self._poller_threads = [
+            threading.Thread(
+                target=self._poll_namespace,
+                args=(ns,),
+                daemon=True,
+                name=f"FigChainPoller-{ns}",
+            )
+            for ns in self.namespaces
+        ]
+        for t in self._poller_threads:
+            t.start()
 
-    def _poll_loop(self):
-        logger.info("Starting poll loop")
+    def _poll_namespace(self, ns: str):
+        """Single update loop for both transports.
+
+        Long polling and plain polling differ only in how long the server may
+        hold the request (LONG_POLL_WAIT_SECONDS vs 0) and how long we pause
+        before the next request (0 vs poll_interval).
+        """
+        long_poll = self.config.use_long_polling
+        transit_failures = 0
+        logger.info(f"Starting {'long-poll' if long_poll else 'poll'} loop for {ns}")
+
         while not self._shutdown_event.is_set():
-            for ns in self.namespaces:
-                if self._shutdown_event.is_set():
-                    break
-
-                cursor = self.namespace_cursors.get(ns, "")
-                try:
-                    # Long polling request
-                    resp = self.transport.fetch_updates(ns, cursor)
-
-                    if resp.figFamilies:
-                        logger.debug(
-                            f"Received {len(resp.figFamilies)} updates for {ns}"
+            pause = self.config.poll_interval
+            try:
+                resp = self.transport.fetch_updates(
+                    ns,
+                    self.namespace_cursors.get(ns, ""),
+                    wait_seconds=LONG_POLL_WAIT_SECONDS if long_poll else 0,
+                )
+            except (requests.Timeout, requests.ConnectionError) as e:
+                logger.warning(f"Poll failed in transit for {ns}: {e}")
+                if long_poll:
+                    transit_failures += 1
+                    if transit_failures >= LONG_POLL_FALLBACK_AFTER:
+                        logger.warning(
+                            f"Long polling for {ns} failed {transit_failures} times "
+                            f"in transit; falling back to polling every "
+                            f"{self.config.poll_interval}s"
                         )
-                        # Update schemas and cursors first, then notify listeners
-                        with self._lock:
-                            if resp.cursor:
-                                self.namespace_cursors[ns] = resp.cursor
-                            if resp.schemas:
-                                for k, v in resp.schemas.items():
-                                    self.schemas[k] = v
-                                    try:
-                                        register_schema(v)
-                                    except Exception as e:
-                                        logger.warning(
-                                            f"Failed to register schema {k}: {e}"
-                                        )
+                        long_poll = False
+            except Exception as e:
+                logger.warning(f"Poll failed for {ns}: {e}")
+            else:
+                transit_failures = 0
+                self._apply_update(ns, resp)
+                if long_poll:
+                    pause = 0  # the server already waited; reconnect now
 
-                        self.store.put_all(resp.figFamilies)
-                        self._notify_listeners(resp.figFamilies)
+            if pause > 0:
+                self._shutdown_event.wait(pause)
 
-                    # Update cursor even if no families (heartbeat/timeout)
-                    elif resp.cursor:
-                        with self._lock:
-                            self.namespace_cursors[ns] = resp.cursor
+    def _apply_update(self, ns: str, resp):
+        if resp.figFamilies:
+            logger.debug(f"Received {len(resp.figFamilies)} updates for {ns}")
+            # Update schemas and cursors first, then notify listeners
+            with self._lock:
+                if resp.cursor:
+                    self.namespace_cursors[ns] = resp.cursor
+                if resp.schemas:
+                    for k, v in resp.schemas.items():
+                        self.schemas[k] = v
+                        try:
+                            register_schema(v)
+                        except Exception as e:
+                            logger.warning(f"Failed to register schema {k}: {e}")
 
-                except Exception as e:
-                    logger.warning(f"Poll failed for {ns}: {e}")
-                    # On error, wait a bit before retrying to avoid hammering
-                    self._shutdown_event.wait(5.0)
+            self.store.put_all(resp.figFamilies)
+            self._notify_listeners(resp.figFamilies)
+
+        # Update cursor even if no families (heartbeat/timeout)
+        elif resp.cursor:
+            with self._lock:
+                self.namespace_cursors[ns] = resp.cursor
 
     def _notify_listeners(self, families: list[FigFamily]):
         with self._lock:
@@ -503,8 +542,9 @@ class FigChainClient:
     def close(self):
         logger.info("Shutting down FigChain client")
         self._shutdown_event.set()
-        if self._poller_thread and self._poller_thread.is_alive():
-            self._poller_thread.join(timeout=5.0)
+        for t in self._poller_threads:
+            if t.is_alive():
+                t.join(timeout=5.0)
 
     def __enter__(self):
         return self

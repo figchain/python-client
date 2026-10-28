@@ -18,6 +18,12 @@ from .serialization import deserialize_ocf, serialize_ocf
 logger = logging.getLogger(__name__)
 
 
+# Tells the server how long it may hold an update request open; absent or 0
+# means respond immediately.
+LONG_POLL_TIMEOUT_HEADER = "X-Long-Poll-Timeout"
+REQUEST_SLACK_SECONDS = 5
+
+
 class Transport:
     def __init__(
         self, base_url: str, token_provider: TokenProvider, environment_id: uuid.UUID
@@ -55,7 +61,16 @@ class Transport:
             resp.content, "InitialFetchResponse", InitialFetchResponse
         )
 
-    def fetch_updates(self, namespace: str, cursor: str) -> UpdateFetchResponse:
+    def fetch_updates(
+        self, namespace: str, cursor: str, wait_seconds: int = 0
+    ) -> UpdateFetchResponse:
+        """Fetch updates after cursor.
+
+        With wait_seconds > 0 the server may hold the request open that long
+        until updates arrive (long polling); 0 returns immediately. The read
+        timeout allows the wait plus slack, so a connection silently dropped
+        mid-wait still fails promptly.
+        """
         logger.debug(f"Fetching updates for namespace {namespace} with cursor {cursor}")
         req = UpdateFetchRequest(
             namespace=namespace, environmentId=self.environment_id, cursor=cursor
@@ -65,7 +80,14 @@ class Transport:
 
         url = f"{self.base_url}/data/updates"
         headers = {"Authorization": f"Bearer {self.token_provider.get_token()}"}
-        resp = self.session.post(url, data=data, headers=headers, timeout=65)
+        if wait_seconds > 0:
+            headers[LONG_POLL_TIMEOUT_HEADER] = str(int(wait_seconds))
+        resp = self.session.post(
+            url,
+            data=data,
+            headers=headers,
+            timeout=wait_seconds + REQUEST_SLACK_SECONDS,
+        )
 
         if resp.status_code == 401:
             raise PermissionError("Authentication failed: Check your credentials")

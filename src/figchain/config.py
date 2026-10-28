@@ -22,11 +22,12 @@ class Config:
     environment_id: str | None = None
     namespaces: set[str] = field(default_factory=set)
     as_of: str | None = None
-    poll_interval: int = 60
+    poll_interval: float = 60  # seconds
     max_retries: int = 3
     retry_delay_ms: int = 1000
     bootstrap_strategy: BootstrapStrategy = BootstrapStrategy.SERVER_FIRST
     tenant_id: str = "default"
+    use_long_polling: bool = True
 
     # S3 Backup Configuration
     s3_backup_enabled: bool = False
@@ -127,6 +128,7 @@ class Config:
             "FIGCHAIN_RETRY_DELAY_MS": "retry_delay_ms",
             "FIGCHAIN_AS_OF_TIMESTAMP": "as_of",
             "FIGCHAIN_BOOTSTRAP_STRATEGY": "bootstrap_strategy",
+            "FIGCHAIN_USE_LONG_POLLING": "use_long_polling",
             "FIGCHAIN_S3_BACKUP_ENABLED": "s3_backup_enabled",
             "FIGCHAIN_S3_BACKUP_BUCKET": "s3_backup_bucket",
             "FIGCHAIN_S3_BACKUP_PREFIX": "s3_backup_prefix",
@@ -150,9 +152,15 @@ class Config:
                     config_data[config_key] = {
                         s.strip() for s in val.split(",") if s.strip()
                     }
-                elif config_key in ("poll_interval", "max_retries", "retry_delay_ms"):
+                elif env_key == "FIGCHAIN_POLLING_INTERVAL_MS":
+                    config_data[config_key] = int(val) / 1000
+                elif config_key in ("max_retries", "retry_delay_ms"):
                     config_data[config_key] = int(val)
-                elif config_key in ("s3_backup_enabled", "s3_backup_path_style_access"):
+                elif config_key in (
+                    "s3_backup_enabled",
+                    "s3_backup_path_style_access",
+                    "use_long_polling",
+                ):
                     config_data[config_key] = val.lower() in ("true", "1", "yes")
                 elif config_key == "bootstrap_strategy":
                     try:
