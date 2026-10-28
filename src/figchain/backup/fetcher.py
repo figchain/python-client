@@ -1,6 +1,8 @@
+import io
+
 import boto3
 from botocore.client import Config as BotoConfig
-import io
+
 from ..config import Config
 
 

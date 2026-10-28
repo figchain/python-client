@@ -1,13 +1,13 @@
-import jwt
 import abc
 from datetime import datetime, timedelta, timezone
+
+import jwt
 
 
 class TokenProvider(abc.ABC):
     @abc.abstractmethod
     def get_token(self) -> str:
         """Returns a valid authentication token."""
-        pass
 
 
 class SharedSecretTokenProvider(TokenProvider):
@@ -24,8 +24,8 @@ class PrivateKeyTokenProvider(TokenProvider):
         private_key: any,
         service_account_id: str,
         tenant_id: str = "default",
-        namespace: str = None,
-        key_id: str = None,
+        namespace: str | None = None,
+        key_id: str | None = None,
         token_ttl_minutes: int = 10,
     ):
         self.private_key = private_key

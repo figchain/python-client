@@ -1,10 +1,10 @@
 # This file is generated. Do not edit.
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import List, Optional, Dict
-from enum import Enum
+
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 
 
 class Operator(str, Enum):
@@ -22,13 +22,13 @@ class Operator(str, Enum):
 class Condition:
     variable: str
     operator: Operator
-    values: List[str]
+    values: list[str]
 
 
 @dataclass(kw_only=True)
 class Rule:
-    description: Optional[str] = None
-    conditions: List[Condition]
+    description: str | None = None
+    conditions: list[Condition]
     targetVersion: uuid.UUID
 
 
@@ -49,32 +49,32 @@ class Fig:
     version: uuid.UUID
     payload: bytes
     isEncrypted: bool = False
-    wrappedDek: Optional[bytes] = None
-    encryptionAlgorithm: Optional[str] = None
-    keyId: Optional[str] = None
+    wrappedDek: bytes | None = None
+    encryptionAlgorithm: str | None = None
+    keyId: str | None = None
 
 
 @dataclass(kw_only=True)
 class FigFamily:
     definition: FigDefinition
-    figs: List[Fig]
-    rules: List[Rule] = field(default_factory=list)
-    defaultVersion: Optional[uuid.UUID] = None
+    figs: list[Fig]
+    rules: list[Rule] = field(default_factory=list)
+    defaultVersion: uuid.UUID | None = None
 
 
 @dataclass(kw_only=True)
 class InitialFetchRequest:
     namespace: str
     environmentId: uuid.UUID
-    asOfTimestamp: Optional[datetime] = None
+    asOfTimestamp: datetime | None = None
 
 
 @dataclass(kw_only=True)
 class InitialFetchResponse:
-    figFamilies: List[FigFamily]
+    figFamilies: list[FigFamily]
     cursor: str
     environmentId: uuid.UUID
-    schemas: Dict[str, str] = field(default_factory=dict)
+    schemas: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(kw_only=True)
@@ -86,6 +86,6 @@ class UpdateFetchRequest:
 
 @dataclass(kw_only=True)
 class UpdateFetchResponse:
-    figFamilies: List[FigFamily]
+    figFamilies: list[FigFamily]
     cursor: str
-    schemas: Dict[str, str] = field(default_factory=dict)
+    schemas: dict[str, str] = field(default_factory=dict)

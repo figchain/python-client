@@ -1,7 +1,9 @@
-import pytest
-from figchain.evaluation import Evaluator
-from figchain.models import Condition, Operator, Rule, FigFamily, Fig, FigDefinition
 import uuid
+
+import pytest
+
+from figchain.evaluation import Evaluator
+from figchain.models import Condition, Fig, FigDefinition, FigFamily, Operator, Rule
 
 
 @pytest.fixture

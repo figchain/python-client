@@ -1,16 +1,16 @@
 from .client import FigChainClient
 from .evaluation import Context
 from .exceptions import (
-    FigChainError,
-    ConfigurationError,
     AuthenticationError,
+    BootstrapError,
+    ConfigurationError,
+    DeserializationError,
+    EncryptionError,
+    FigChainError,
     SchemaError,
     SchemaNotFoundError,
     SchemaRegistrationError,
-    DeserializationError,
-    EncryptionError,
     TransportError,
-    BootstrapError,
 )
 
 try:

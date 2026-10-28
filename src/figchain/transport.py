@@ -1,10 +1,11 @@
 import logging
 import urllib.parse
-import requests
 import uuid
 from datetime import datetime
-from typing import Optional, List
-from .serialization import serialize_ocf, deserialize_ocf
+
+import requests
+
+from .auth import TokenProvider
 from .models import (
     InitialFetchRequest,
     InitialFetchResponse,
@@ -12,9 +13,15 @@ from .models import (
     UpdateFetchResponse,
 )
 from .models_dto import NamespaceKey, UserPublicKey
-from .auth import TokenProvider
+from .serialization import deserialize_ocf, serialize_ocf
 
 logger = logging.getLogger(__name__)
+
+
+# Tells the server how long it may hold an update request open; absent or 0
+# means respond immediately.
+LONG_POLL_TIMEOUT_HEADER = "X-Long-Poll-Timeout"
+REQUEST_SLACK_SECONDS = 5
 
 
 class Transport:
@@ -28,7 +35,7 @@ class Transport:
         self.session.headers.update({"Content-Type": "application/octet-stream"})
 
     def fetch_initial(
-        self, namespace: str, as_of: Optional[datetime] = None
+        self, namespace: str, as_of: datetime | None = None
     ) -> InitialFetchResponse:
         logger.debug(f"Fetching initial data for namespace {namespace}")
         req = InitialFetchRequest(
@@ -54,7 +61,16 @@ class Transport:
             resp.content, "InitialFetchResponse", InitialFetchResponse
         )
 
-    def fetch_updates(self, namespace: str, cursor: str) -> UpdateFetchResponse:
+    def fetch_updates(
+        self, namespace: str, cursor: str, wait_seconds: int = 0
+    ) -> UpdateFetchResponse:
+        """Fetch updates after cursor.
+
+        With wait_seconds > 0 the server may hold the request open that long
+        until updates arrive (long polling); 0 returns immediately. The read
+        timeout allows the wait plus slack, so a connection silently dropped
+        mid-wait still fails promptly.
+        """
         logger.debug(f"Fetching updates for namespace {namespace} with cursor {cursor}")
         req = UpdateFetchRequest(
             namespace=namespace, environmentId=self.environment_id, cursor=cursor
@@ -64,7 +80,14 @@ class Transport:
 
         url = f"{self.base_url}/data/updates"
         headers = {"Authorization": f"Bearer {self.token_provider.get_token()}"}
-        resp = self.session.post(url, data=data, headers=headers, timeout=65)
+        if wait_seconds > 0:
+            headers[LONG_POLL_TIMEOUT_HEADER] = str(int(wait_seconds))
+        resp = self.session.post(
+            url,
+            data=data,
+            headers=headers,
+            timeout=wait_seconds + REQUEST_SLACK_SECONDS,
+        )
 
         if resp.status_code == 401:
             raise PermissionError("Authentication failed: Check your credentials")
@@ -77,7 +100,7 @@ class Transport:
 
         return deserialize_ocf(resp.content, "UpdateFetchResponse", UpdateFetchResponse)
 
-    def get_namespace_key(self, namespace: str) -> List[NamespaceKey]:
+    def get_namespace_key(self, namespace: str) -> list[NamespaceKey]:
         url = f"{self.base_url}/envelopes"
         params = {"namespace": namespace}
         headers = {"Authorization": f"Bearer {self.token_provider.get_token()}"}

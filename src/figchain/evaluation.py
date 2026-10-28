@@ -1,12 +1,12 @@
 import math
-from typing import Dict, Optional
-from .models import FigFamily, Rule, Condition, Operator, Fig
 
-Context = Dict[str, str]
+from .models import Condition, Fig, FigFamily, Operator, Rule
+
+Context = dict[str, str]
 
 
 class Evaluator:
-    def evaluate(self, family: FigFamily, context: Context) -> Optional[Fig]:
+    def evaluate(self, family: FigFamily, context: Context) -> Fig | None:
         version_id = None
 
         # 1. Rules

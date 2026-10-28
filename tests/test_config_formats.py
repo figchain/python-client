@@ -1,7 +1,8 @@
-import json
-import yaml
 import importlib.util
+import json
 from pathlib import Path
+
+import yaml
 
 # Load Config module directly to avoid importing the whole package (tests run without deps)
 spec = importlib.util.spec_from_file_location(
@@ -61,3 +62,26 @@ def test_load_no_ext_try_yaml_then_json(tmp_path):
     assert cfg2.base_url == "https://fallback.example/"
     assert cfg2.environment_id == "env-xyz"
     assert set(cfg2.namespaces) == {"a"}
+
+
+def test_bootstrap_strategy_default_and_normalization(tmp_path, monkeypatch):
+    BootstrapStrategy = config_mod.BootstrapStrategy
+    monkeypatch.delenv("FIGCHAIN_BOOTSTRAP_STRATEGY", raising=False)
+    assert Config.load().bootstrap_strategy == BootstrapStrategy.SERVER_FIRST
+
+    for raw, want in [
+        ("S3_BACKUP_ONLY", BootstrapStrategy.S3_BACKUP_ONLY),
+        ("server_first", BootstrapStrategy.SERVER_FIRST),
+        ("hybrid", BootstrapStrategy.HYBRID),
+    ]:
+        monkeypatch.setenv("FIGCHAIN_BOOTSTRAP_STRATEGY", raw)
+        assert Config.load().bootstrap_strategy == want
+
+    # Same normalisation applies to file-based config
+    monkeypatch.delenv("FIGCHAIN_BOOTSTRAP_STRATEGY")
+    cfg_file = tmp_path / "cfg.json"
+    cfg_file.write_text(json.dumps({"bootstrap_strategy": "s3_backup_only"}))
+    assert (
+        Config.load(path=str(cfg_file)).bootstrap_strategy
+        == BootstrapStrategy.S3_BACKUP_ONLY
+    )

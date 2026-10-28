@@ -1,8 +1,8 @@
-import pytest
 import jwt
+import pytest
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-from figchain.auth import SharedSecretTokenProvider, PrivateKeyTokenProvider
+from figchain.auth import PrivateKeyTokenProvider, SharedSecretTokenProvider
 
 
 def test_shared_secret_token_provider():

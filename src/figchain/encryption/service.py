@@ -1,8 +1,8 @@
 import base64
 import logging
-from typing import Dict, Optional
-from ..transport import Transport
+
 from ..models import Fig
+from ..transport import Transport
 from . import crypto
 
 logger = logging.getLogger(__name__)
@@ -14,15 +14,15 @@ class EncryptionService:
         transport: Transport,
         private_key: any,
         s3_backup_enabled: bool = False,
-        s3_backup_config: Optional[dict] = None,
-        client_id: Optional[str] = None,
+        s3_backup_config: dict | None = None,
+        client_id: str | None = None,
     ):
         self.transport = transport
         self.s3_backup_enabled = s3_backup_enabled
         self.s3_backup_config = s3_backup_config or {}
         self.client_id = client_id
         self.private_key = private_key
-        self.nsk_cache: Dict[str, bytes] = {}
+        self.nsk_cache: dict[str, bytes] = {}
 
     def decrypt(self, fig: Fig, namespace: str) -> bytes:
         if not fig.isEncrypted:
@@ -46,7 +46,7 @@ class EncryptionService:
         # Decrypt Payload
         return crypto.decrypt_aes_gcm(fig.payload, dek)
 
-    def _get_nsk(self, namespace: str, key_id: Optional[str]) -> bytes:
+    def _get_nsk(self, namespace: str, key_id: str | None) -> bytes:
         if key_id and key_id in self.nsk_cache:
             return self.nsk_cache[key_id]
 
@@ -63,7 +63,7 @@ class EncryptionService:
                 logger.warning(
                     f"Failed to fetch NSK from API and s3 backup disabled: {e}"
                 )
-                pass  # Proceed to fallback check
+                # Proceed to fallback check
 
         # Try S3 Fallback
         if not matching_key and self.s3_backup_enabled and self.client_id:
@@ -97,9 +97,10 @@ class EncryptionService:
 
     def _fetch_from_s3(self, namespace: str):
         try:
-            import boto3
             import json
             from types import SimpleNamespace
+
+            import boto3
         except ImportError:
             logger.error("boto3 required for s3 backup operations")
             raise

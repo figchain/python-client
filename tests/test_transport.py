@@ -1,9 +1,11 @@
-import pytest
 import uuid
 from unittest.mock import MagicMock, patch
-from figchain.transport import Transport
-from figchain.models import InitialFetchResponse, UpdateFetchResponse
+
+import pytest
+
 from figchain.auth import SharedSecretTokenProvider
+from figchain.models import InitialFetchResponse, UpdateFetchResponse
+from figchain.transport import Transport
 
 
 @pytest.fixture
@@ -79,3 +81,28 @@ def test_fetch_updates_httperror(transport, mock_session):
 
     with pytest.raises(Exception, match="Server Error"):
         transport.fetch_updates("ns", "c")
+
+
+def _ok_update(mock_session):
+    from figchain.serialization import serialize_ocf
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.content = serialize_ocf(
+        UpdateFetchResponse(figFamilies=[], cursor="c2"), "UpdateFetchResponse"
+    )
+    mock_session.post.return_value = mock_resp
+
+
+def test_fetch_updates_long_poll_sends_wait_header(transport, mock_session):
+    _ok_update(mock_session)
+
+    transport.fetch_updates("ns", "c1", wait_seconds=30)
+    _, kwargs = mock_session.post.call_args
+    assert kwargs["headers"]["X-Long-Poll-Timeout"] == "30"
+    assert kwargs["timeout"] == 35
+
+    transport.fetch_updates("ns", "c1")
+    _, kwargs = mock_session.post.call_args
+    assert "X-Long-Poll-Timeout" not in kwargs["headers"]
+    assert kwargs["timeout"] == 5

@@ -1,6 +1,7 @@
 import uuid
+
+from figchain.models import FigDefinition, FigFamily
 from figchain.store import Store
-from figchain.models import FigFamily, FigDefinition
 
 
 def test_store_ops():

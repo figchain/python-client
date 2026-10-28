@@ -1,14 +1,16 @@
+import dataclasses
+import datetime
 import io
 import json
-import dataclasses
-import uuid
-import datetime
 import os
+import uuid
 from enum import Enum
-from typing import Type, TypeVar, Any, Dict, List, Set, get_type_hints, Union
-import avro.schema
-import avro.io
+from typing import Any, TypeVar, Union, get_type_hints
+
 import avro.datafile
+import avro.io
+import avro.schema
+
 from . import models
 from .exceptions import SchemaNotFoundError
 
@@ -29,7 +31,7 @@ _NAMES = avro.schema.Names()
 # Load bundled schema
 _SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.avsc")
 if os.path.exists(_SCHEMA_PATH):
-    with open(_SCHEMA_PATH, "r") as f:
+    with open(_SCHEMA_PATH) as f:
         # Parsing into _NAMES allows looking up types by name later
         avro.schema.make_avsc_object(json.load(f), _NAMES)
 
@@ -44,12 +46,12 @@ def register_schema(schema_json: Any):
 
 
 def register_schema_from_file(path: str):
-    with open(path, "r") as f:
+    with open(path) as f:
         register_schema(json.load(f))
 
 
 def get_schema(name: str) -> avro.schema.Schema:
-    if isinstance(name, str) and (name.startswith("{") or name.startswith('"')):
+    if isinstance(name, str) and (name.startswith(("{", '"'))):
         return avro.schema.parse(name)
 
     # Try full name and short name
@@ -86,9 +88,7 @@ def _to_avro_friendly(obj: Any) -> Any:
         if obj.tzinfo is None:
             return obj.replace(tzinfo=datetime.timezone.utc)
         return obj
-    elif isinstance(obj, list):
-        return [_to_avro_friendly(x) for x in obj]
-    elif isinstance(obj, set):
+    elif isinstance(obj, list) or isinstance(obj, set):
         return [_to_avro_friendly(x) for x in obj]
     elif isinstance(obj, dict):
         return {k: _to_avro_friendly(v) for k, v in obj.items()}
@@ -97,7 +97,7 @@ def _to_avro_friendly(obj: Any) -> Any:
     return obj
 
 
-def _from_avro_friendly(data: Any, cls: Type[T]) -> T:
+def _from_avro_friendly(data: Any, cls: type[T]) -> T:
     if data is None:
         return None
 
@@ -109,7 +109,7 @@ def _from_avro_friendly(data: Any, cls: Type[T]) -> T:
             return _from_avro_friendly(data, non_none_args[0])
         return data
 
-    if cls is Any or cls is dict or cls is Dict:
+    if cls is Any or cls is dict or cls is dict:
         return data
 
     if dataclasses.is_dataclass(cls):
@@ -127,13 +127,13 @@ def _from_avro_friendly(data: Any, cls: Type[T]) -> T:
     if cls is datetime.datetime and isinstance(data, (int, float)):
         return datetime.datetime.fromtimestamp(data / 1000.0, tz=datetime.timezone.utc)
 
-    if origin is list or origin is List:
+    if origin is list or origin is list:
         item_type = cls.__args__[0]
         return [_from_avro_friendly(x, item_type) for x in data]
 
-    if origin is set or origin is Set:
+    if origin is set or origin is set:
         item_type = cls.__args__[0]
-        return set(_from_avro_friendly(x, item_type) for x in data)
+        return {_from_avro_friendly(x, item_type) for x in data}
 
     if isinstance(cls, type) and issubclass(cls, Enum):
         return cls(data)
@@ -154,8 +154,8 @@ def serialize(obj: Any, schema_name: str) -> bytes:
 def deserialize(
     data: bytes,
     schema_name: str,
-    cls: Type[T],
-    writer_schema_json: Union[str, None] = None,
+    cls: type[T],
+    writer_schema_json: str | None = None,
 ) -> T:
     """Deserializes an object from raw Avro binary."""
     reader_schema = get_schema(schema_name)
@@ -189,7 +189,7 @@ def serialize_ocf(obj: Any, schema_name: str) -> bytes:
     return res
 
 
-def deserialize_ocf(data: bytes, schema_name: str, cls: Type[T]) -> T:
+def deserialize_ocf(data: bytes, schema_name: str, cls: type[T]) -> T:
     """Deserializes an object from Avro Object Container File (OCF) format."""
     bytes_reader = _NonClosingBytesIO(data)
     with avro.datafile.DataFileReader(bytes_reader, avro.io.DatumReader()) as dfr:
