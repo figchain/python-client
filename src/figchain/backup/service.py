@@ -173,8 +173,10 @@ class S3BackupService:
         if not self.config.s3_backup_enabled:
             return None
 
+        # Backups are encrypted to the X25519 encryption key; the auth key is only a fallback
+        # for configs that set a single key, since it would otherwise always win.
         s3_backup_key_hex = (
-            self.config.auth_private_key or self.config.encryption_private_key
+            self.config.encryption_private_key or self.config.auth_private_key
         )
         if not s3_backup_key_hex:
             raise ValueError("Backup private key (hex) not configured")
