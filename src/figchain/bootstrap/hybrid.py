@@ -5,6 +5,9 @@ from .strategy import BootstrapResult, BootstrapStrategy
 
 logger = logging.getLogger(__name__)
 
+# Bounds the hybrid catch-up loop.
+MAX_CATCH_UP_PAGES = 1000
+
 
 class HybridStrategy(BootstrapStrategy):
     def __init__(
@@ -57,13 +60,19 @@ class HybridStrategy(BootstrapStrategy):
             if ns not in missing_namespaces and cursor:
                 try:
                     logger.debug(f"Catching up namespace {ns} from cursor {cursor}")
-                    resp = self.transport.fetch_updates(ns, cursor)
-                    if resp.figFamilies:
-                        all_families.extend(resp.figFamilies)
-                    if resp.schemas:
-                        final_schemas.update(resp.schemas)
-                    if resp.cursor:
-                        final_cursors[ns] = resp.cursor
+                    # The server returns changes a page at a time, so keep fetching until the
+                    # cursor stops advancing; a single call can leave the client behind.
+                    for _ in range(MAX_CATCH_UP_PAGES):
+                        resp = self.transport.fetch_updates(ns, cursor)
+                        if resp.figFamilies:
+                            all_families.extend(resp.figFamilies)
+                        if resp.schemas:
+                            final_schemas.update(resp.schemas)
+                        if resp.cursor:
+                            final_cursors[ns] = resp.cursor
+                        if not resp.cursor or resp.cursor == cursor or not resp.figFamilies:
+                            break
+                        cursor = resp.cursor
                 except Exception as e:
                     logger.warning(f"Failed to catch up for {ns}: {e}")
 

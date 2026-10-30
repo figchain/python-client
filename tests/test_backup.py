@@ -221,3 +221,24 @@ def test_hybrid_keeps_backup_schemas():
     result = HybridStrategy(s3, MagicMock(), transport).bootstrap(["ns"])
     assert result.schemas == {"a": "A", "b": "B"}
     assert result.cursors == {"ns": "c2"}
+
+
+def test_hybrid_catch_up_follows_all_pages():
+    from unittest.mock import MagicMock
+
+    from figchain.bootstrap.hybrid import HybridStrategy
+    from figchain.bootstrap.strategy import BootstrapResult
+
+    s3 = MagicMock()
+    s3.bootstrap.return_value = BootstrapResult([], {"ns": "c1"}, {})
+    # One change per call, like the server does
+    pages = {
+        "c1": MagicMock(figFamilies=["f2"], cursor="c2", schemas={}),
+        "c2": MagicMock(figFamilies=["f3"], cursor="c3", schemas={}),
+        "c3": MagicMock(figFamilies=[], cursor="c3", schemas={}),
+    }
+    transport = MagicMock()
+    transport.fetch_updates.side_effect = lambda ns, cursor: pages[cursor]
+    result = HybridStrategy(s3, MagicMock(), transport).bootstrap(["ns"])
+    assert result.fig_families == ["f2", "f3"]
+    assert result.cursors == {"ns": "c3"}
