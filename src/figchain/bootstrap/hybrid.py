@@ -34,6 +34,7 @@ class HybridStrategy(BootstrapStrategy):
 
         all_families = list(s3_backup_result.fig_families)
         final_cursors = dict(s3_backup_result.cursors)
+        final_schemas = dict(s3_backup_result.schemas)
 
         # 3. Fetch missing from Server
         if missing_namespaces:
@@ -44,6 +45,7 @@ class HybridStrategy(BootstrapStrategy):
                 server_result = self.server_strategy.bootstrap(missing_namespaces)
                 all_families.extend(server_result.fig_families)
                 final_cursors.update(server_result.cursors)
+                final_schemas.update(server_result.schemas)
             except Exception as e:
                 logger.error(f"Server bootstrap failed for missing namespaces: {e}")
 
@@ -58,9 +60,11 @@ class HybridStrategy(BootstrapStrategy):
                     resp = self.transport.fetch_updates(ns, cursor)
                     if resp.figFamilies:
                         all_families.extend(resp.figFamilies)
+                    if resp.schemas:
+                        final_schemas.update(resp.schemas)
                     if resp.cursor:
                         final_cursors[ns] = resp.cursor
                 except Exception as e:
                     logger.warning(f"Failed to catch up for {ns}: {e}")
 
-        return BootstrapResult(all_families, final_cursors)
+        return BootstrapResult(all_families, final_cursors, final_schemas)

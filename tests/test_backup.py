@@ -124,3 +124,100 @@ def test_decrypts_v3_via_hex_key_loader():
 
     payload = decrypt_backup(_v3_backup(), load_private_key(V3_KEY_HEX))
     assert payload.tenant_id == "plugin_e2e"
+
+
+def test_server_item_with_latest_fig_parses():
+    """Server backups write items as {definition, latestFig}, not a figs list."""
+    from figchain.backup.service import BackupPayload
+
+    item = {
+        "definition": {
+            "namespace": "shop",
+            "key": "checkout",
+            "figId": "982daf00-03e2-5070-b257-01c4a682cbe9",
+            "schemaUri": "tag:figchain.io,2025:shop:checkout-settings:1",
+            "schemaVersion": "1",
+            "createdAt": "2026-10-30T01:44:45.408Z",
+            "updatedAt": "2026-10-30T01:44:45.408Z",
+        },
+        "latestFig": {
+            "figId": "982daf00-03e2-5070-b257-01c4a682cbe9",
+            "version": "01a18a7b-4734-7bee-a13e-baf6aecb9245",
+            "encrypted": False,
+            "encryptionAlgorithm": None,
+            "keyId": None,
+            "wrappedDek": None,
+            "payload": {"data": {"binaryData": "BlVTRCg="}},
+        },
+    }
+    families = BackupPayload("t", "g", "s", [item]).items
+    assert len(families) == 1
+    figs = families[0].figs
+    assert len(figs) == 1
+    assert str(figs[0].version) == "01a18a7b-4734-7bee-a13e-baf6aecb9245"
+    assert figs[0].payload == b"\x06USD\x28"  # Avro {USD, 20}
+    assert figs[0].isEncrypted is False
+
+
+def test_encrypted_latest_fig_keeps_dek():
+    from figchain.backup.service import BackupPayload
+
+    fig = BackupPayload._latest_fig_to_fig(
+        {
+            "figId": "982daf00-03e2-5070-b257-01c4a682cbe9",
+            "version": "01a18a7b-4734-7bee-a13e-baf6aecb9245",
+            "encrypted": True,
+            "encryptionAlgorithm": "AES-GCM",
+            "keyId": "k1",
+            "wrappedDek": base64.b64encode(b"dek").decode(),
+            "payload": {"data": {"binaryData": base64.b64encode(b"ct").decode()}},
+        }
+    )
+    assert fig.isEncrypted and fig.wrappedDek == b"dek" and fig.keyId == "k1"
+    assert fig.payload == b"ct"
+
+
+def test_backup_strategy_returns_public_schemas():
+    from figchain.backup.service import BackupPayload
+    from figchain.bootstrap.backup import S3BackupStrategy
+
+    schema = '{"type":"record","name":"S","fields":[]}'
+    payload = BackupPayload(
+        "t",
+        "g",
+        "sync",
+        [],
+        public_data={
+            "schemas": {
+                "tag:x:s:1": {
+                    "content": base64.b64encode(schema.encode()).decode(),
+                    "uri": "tag:x:s:1",
+                }
+            }
+        },
+    )
+
+    class FakeService:
+        def load_backup(self):
+            return payload
+
+    result = S3BackupStrategy(FakeService()).bootstrap(["ns"])
+    assert result.schemas == {"tag:x:s:1": schema}
+    assert result.cursors == {"ns": "sync"}
+
+
+def test_hybrid_keeps_backup_schemas():
+    from unittest.mock import MagicMock
+
+    from figchain.bootstrap.hybrid import HybridStrategy
+    from figchain.bootstrap.strategy import BootstrapResult
+
+    s3 = MagicMock()
+    s3.bootstrap.return_value = BootstrapResult([], {"ns": "c1"}, {"a": "A"})
+    transport = MagicMock()
+    transport.fetch_updates.return_value = MagicMock(
+        figFamilies=[], cursor="c2", schemas={"b": "B"}
+    )
+    result = HybridStrategy(s3, MagicMock(), transport).bootstrap(["ns"])
+    assert result.schemas == {"a": "A", "b": "B"}
+    assert result.cursors == {"ns": "c2"}

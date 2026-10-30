@@ -59,8 +59,12 @@ class BackupPayload:
             updatedAt=self._parse_dt(def_data["updatedAt"]),
         )
 
-        # Figs
+        # Figs. The server writes each item as {definition, latestFig}; a
+        # FigFamily-shaped "figs" list is also accepted.
         figs = []
+        latest = d.get("latestFig")
+        if latest:
+            figs.append(self._latest_fig_to_fig(latest))
         for f in d.get("figs", []):
             # Assume base64 string for bytes in JSON
             payload = (
@@ -103,6 +107,26 @@ class BackupPayload:
 
         return FigFamily(
             definition=definition, figs=figs, rules=rules, defaultVersion=dv
+        )
+
+    @staticmethod
+    def _latest_fig_to_fig(f: dict) -> Fig:
+        """Map the server's Fig JSON (payload.data.binaryData) to a client Fig."""
+        data = (f.get("payload") or {}).get("data") or {}
+        binary = data.get("binaryData")
+        if binary is None:
+            raise ValueError(
+                f"latestFig {f.get('figId')} has no payload.data.binaryData"
+            )
+        wrapped_dek = f.get("wrappedDek")
+        return Fig(
+            figId=uuid.UUID(f["figId"]),
+            version=uuid.UUID(f["version"]),
+            payload=base64.b64decode(binary),
+            isEncrypted=bool(f.get("encrypted")),
+            wrappedDek=base64.b64decode(wrapped_dek) if wrapped_dek else None,
+            encryptionAlgorithm=f.get("encryptionAlgorithm"),
+            keyId=f.get("keyId"),
         )
 
     def _parse_dt(self, dt_str: str) -> datetime:
