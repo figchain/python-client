@@ -17,11 +17,21 @@ from .fetcher import S3BackupFetcher
 logger = logging.getLogger(__name__)
 
 
+SUPPORTED_BACKUP_VERSIONS = ("v2", "v3")
+
+
 class BackupPayload:
     def __init__(
-        self, tenant_id: str, generated_at: str, sync_token: str, items_data: list[dict]
+        self,
+        tenant_id: str,
+        generated_at: str,
+        sync_token: str,
+        items_data: list[dict],
+        public_data: dict | None = None,
     ):
         self.tenant_id = tenant_id
+        # Parsed v3 public section (e.g. generatedAt, schemas); None for v2.
+        self.public_data = public_data
         self.generated_at = generated_at
         self.sync_token = sync_token
         self.items_data = items_data
@@ -101,6 +111,60 @@ class BackupPayload:
         return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
 
 
+def decrypt_backup(backup_data: dict, private_key) -> BackupPayload:
+    """Decrypt a parsed backup document (format v2 or v3)."""
+    version = backup_data.get("version", "v2")
+    if version not in SUPPORTED_BACKUP_VERSIONS:
+        raise ValueError(
+            f"Unsupported backup version {version!r}; "
+            f"supported: {', '.join(SUPPORTED_BACKUP_VERSIONS)}"
+        )
+
+    aad = None
+    public_data = None
+    if version == "v3":
+        public_str = backup_data.get("publicData")
+        if not isinstance(public_str, str):
+            raise ValueError("Invalid v3 backup format: missing publicData string")
+        # The exact UTF-8 bytes of publicData are authenticated as AES-GCM AAD.
+        aad = public_str.encode("utf-8")
+
+    # Decrypt AES Key
+    logger.debug("Decrypting AES key...")
+    encrypted_key = backup_data.get("encryptedKey")
+    if not encrypted_key:
+        raise ValueError("Invalid backup format: missing encryptedKey")
+
+    aes_key = decrypt_aes_key(encrypted_key, private_key)
+
+    # Decrypt Payload
+    logger.debug("Decrypting payload...")
+    encrypted_data = backup_data.get("encryptedData")
+    if not encrypted_data:
+        raise ValueError("Invalid backup format: missing encryptedData")
+
+    json_payload = decrypt_data(encrypted_data, aes_key, aad)
+
+    if aad is not None:
+        # Only parse after the tag has authenticated it.
+        public_data = json.loads(aad)
+
+    # Parse
+    payload_dict = json.loads(json_payload)
+
+    logger.info(
+        f"Successfully loaded backup from s3 backup. Tenant: {payload_dict.get('tenantId')}"
+    )
+
+    return BackupPayload(
+        tenant_id=payload_dict.get("tenantId"),
+        generated_at=payload_dict.get("generatedAt"),
+        sync_token=payload_dict.get("syncToken"),
+        items_data=payload_dict.get("items", []),
+        public_data=public_data,
+    )
+
+
 class S3BackupService:
     def __init__(self, config: Config):
         self.config = config
@@ -132,32 +196,4 @@ class S3BackupService:
         finally:
             fetcher.close()
 
-        # 4. Decrypt AES Key
-        logger.debug("Decrypting AES key...")
-        encrypted_key = backup_data.get("encryptedKey")
-        if not encrypted_key:
-            raise ValueError("Invalid backup format: missing encryptedKey")
-
-        aes_key = decrypt_aes_key(encrypted_key, private_key)
-
-        # 5. Decrypt Payload
-        logger.debug("Decrypting payload...")
-        encrypted_data = backup_data.get("encryptedData")
-        if not encrypted_data:
-            raise ValueError("Invalid backup format: missing encryptedData")
-
-        json_payload = decrypt_data(encrypted_data, aes_key)
-
-        # 6. Parse
-        payload_dict = json.loads(json_payload)
-
-        logger.info(
-            f"Successfully loaded backup from s3 backup. Tenant: {payload_dict.get('tenantId')}"
-        )
-
-        return BackupPayload(
-            tenant_id=payload_dict.get("tenantId"),
-            generated_at=payload_dict.get("generatedAt"),
-            sync_token=payload_dict.get("syncToken"),
-            items_data=payload_dict.get("items", []),
-        )
+        return decrypt_backup(backup_data, private_key)

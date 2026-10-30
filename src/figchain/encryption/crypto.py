@@ -50,7 +50,9 @@ def sign_ed25519(message: bytes, private_key: Ed25519PrivateKey) -> bytes:
     return private_key.sign(message)
 
 
-def decrypt_aes_gcm(encrypted_bytes: bytes, key: bytes) -> bytes:
+def decrypt_aes_gcm(
+    encrypted_bytes: bytes, key: bytes, aad: bytes | None = None
+) -> bytes:
     """
     Decrypts data using AES-GCM.
     Expected format: IV (12 bytes) + Ciphertext + Tag (16 bytes)
@@ -62,4 +64,4 @@ def decrypt_aes_gcm(encrypted_bytes: bytes, key: bytes) -> bytes:
     ciphertext = encrypted_bytes[12:]
 
     aesgcm = AESGCM(key)
-    return aesgcm.decrypt(iv, ciphertext, None)
+    return aesgcm.decrypt(iv, ciphertext, aad)
