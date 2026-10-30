@@ -28,7 +28,7 @@ from my_app.models import MyConfig
 
 # Initialize the client
 client = FigChainClient(
-    base_url="https://api.figchain.io",
+    base_url="https://app.figchain.io/api",
     client_secret="your-client-secret",
     environment_id="your-environment-id",
     namespaces={"default"}
