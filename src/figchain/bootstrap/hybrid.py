@@ -5,6 +5,9 @@ from .strategy import BootstrapResult, BootstrapStrategy
 
 logger = logging.getLogger(__name__)
 
+# Bounds the hybrid catch-up loop.
+MAX_CATCH_UP_PAGES = 1000
+
 
 class HybridStrategy(BootstrapStrategy):
     def __init__(
@@ -34,6 +37,7 @@ class HybridStrategy(BootstrapStrategy):
 
         all_families = list(s3_backup_result.fig_families)
         final_cursors = dict(s3_backup_result.cursors)
+        final_schemas = dict(s3_backup_result.schemas)
 
         # 3. Fetch missing from Server
         if missing_namespaces:
@@ -44,6 +48,7 @@ class HybridStrategy(BootstrapStrategy):
                 server_result = self.server_strategy.bootstrap(missing_namespaces)
                 all_families.extend(server_result.fig_families)
                 final_cursors.update(server_result.cursors)
+                final_schemas.update(server_result.schemas)
             except Exception as e:
                 logger.error(f"Server bootstrap failed for missing namespaces: {e}")
 
@@ -55,12 +60,20 @@ class HybridStrategy(BootstrapStrategy):
             if ns not in missing_namespaces and cursor:
                 try:
                     logger.debug(f"Catching up namespace {ns} from cursor {cursor}")
-                    resp = self.transport.fetch_updates(ns, cursor)
-                    if resp.figFamilies:
-                        all_families.extend(resp.figFamilies)
-                    if resp.cursor:
-                        final_cursors[ns] = resp.cursor
+                    # The server returns changes a page at a time, so keep fetching until the
+                    # cursor stops advancing; a single call can leave the client behind.
+                    for _ in range(MAX_CATCH_UP_PAGES):
+                        resp = self.transport.fetch_updates(ns, cursor)
+                        if resp.figFamilies:
+                            all_families.extend(resp.figFamilies)
+                        if resp.schemas:
+                            final_schemas.update(resp.schemas)
+                        if resp.cursor:
+                            final_cursors[ns] = resp.cursor
+                        if not resp.cursor or resp.cursor == cursor or not resp.figFamilies:
+                            break
+                        cursor = resp.cursor
                 except Exception as e:
                     logger.warning(f"Failed to catch up for {ns}: {e}")
 
-        return BootstrapResult(all_families, final_cursors)
+        return BootstrapResult(all_families, final_cursors, final_schemas)
